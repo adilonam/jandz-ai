@@ -1,0 +1,45 @@
+# Bytecode / cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.Python
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Environment & secrets (keep templates like .env.example unignored if you add one)
+.env
+.env.*
+!.env.example
+
+# Packaging / installs
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Testing & types
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# Logs / local data
+*.log
+logs/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+
+# Jupyter (if you ever use notebooks)
+.ipynb_checkpoints/
