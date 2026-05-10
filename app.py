@@ -20,7 +20,7 @@ WHATSAPP_GRAPH_API_VERSION = os.getenv("WHATSAPP_GRAPH_API_VERSION", "v21.0").st
 WHATSAPP_REPLY_TEXT = "hi im on testing now"
 
 app = FastAPI(
-    title="hire-chat API",
+    title="jandz-ai API",
     version="0.1.0",
     description="Basic FastAPI starter.",
 )
@@ -28,7 +28,7 @@ app = FastAPI(
 
 @app.get("/")
 async def root() -> Dict[str, str]:
-    return {"message": "hire-chat API"}
+    return {"message": "jandz-ai API"}
 
 
 @app.get("/health")

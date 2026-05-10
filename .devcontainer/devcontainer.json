@@ -1,5 +1,5 @@
 {
-  "name": "hire-chat",
+  "name": "jandz-ai",
   "build": {
     "dockerfile": "Dockerfile",
     "context": ".."
