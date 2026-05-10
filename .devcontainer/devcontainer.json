@@ -1,9 +1,10 @@
 {
   "name": "jandz-ai",
-  "build": {
-    "dockerfile": "Dockerfile",
-    "context": ".."
-  },
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "runServices": ["app", "db"],
+  "shutdownAction": "stopCompose",
+  "overrideCommand": true,
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "customizations": {
     "vscode": {
@@ -18,5 +19,6 @@
       }
     }
   },
+  "forwardPorts": [8000, 5432],
   "remoteUser": "vscode"
 }
