@@ -10,11 +10,11 @@ ENV PYTHONUNBUFFERED=1 \
 RUN sudo rm -f /etc/apt/sources.list.d/yarn.list /etc/apt/sources.list.d/yarn-stable.list \
     && sudo rm -f /etc/apt/sources.list.d/*yarn*
 
-# Install ngrok CLI from the official apt repository
+# Install ngrok CLI and PostgreSQL client
 RUN curl -fsSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
         | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null \
     && echo "deb https://ngrok-agent.s3.amazonaws.com bookworm main" \
         | sudo tee /etc/apt/sources.list.d/ngrok.list >/dev/null \
     && sudo apt-get update \
-    && sudo apt-get install -y --no-install-recommends ngrok \
+    && sudo apt-get install -y --no-install-recommends ngrok postgresql-client \
     && sudo rm -rf /var/lib/apt/lists/*

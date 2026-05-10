@@ -9,3 +9,5 @@
 4. **Structured layout** — Split routers (`APIRouter`), settings/config, and shared dependencies (`Depends`) into modules as the API grows instead of putting everything in one file.
 
 5. **Dependencies explicit** — Pin versions in `requirements.txt` or `pyproject.toml`; run tests and linters locally before merging changes that touch API behavior.
+
+- use psql to ask the database credential are on DATABASE_URL
