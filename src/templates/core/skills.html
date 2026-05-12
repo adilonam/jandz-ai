@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Skills{% endblock %}
+{% block body_class %}dashboard-page{% endblock %}
+
+{% block content %}
+<div class="wrapper">
+  <div class="header">
+    <h1>Skills</h1>
+    <div class="header-actions">
+      <a class="download-link" href="/">Dashboard</a>
+      <a class="download-link" href="/users">Users</a>
+      <form method="post" action="/logout">
+        <button class="logout-btn" type="submit">Logout</button>
+      </form>
+    </div>
+  </div>
+  <section class="cards">
+    <article class="card">
+      <h2>Skill Catalog</h2>
+      <p class="muted">Canonical skills and linked users.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Skill</th>
+            <th>Users Count</th>
+            <th>Users</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if skills %}
+            {% for skill in skills %}
+            <tr>
+              <td>{{ skill.name }}</td>
+              <td>{{ skill.users_count }}</td>
+              <td>
+                {% if skill.users %}
+                  {% for user in skill.users %}
+                  <span class="badge">{{ user.display_name }} ({{ user.phone_number }})</span>
+                  {% endfor %}
+                {% else %}
+                -
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="3">No skills found.</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </article>
+  </section>
+</div>
+{% endblock %}

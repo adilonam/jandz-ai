@@ -1,0 +1,33 @@
+"""Skill and user-skill association models."""
+
+from typing import List, TYPE_CHECKING
+
+from sqlalchemy import Column, ForeignKey, Integer, String, Table, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from src.db import Base
+
+if TYPE_CHECKING:
+    from src.models.whatsapp_user import WhatsAppUser
+
+whatsapp_user_skills = Table(
+    "whatsapp_user_skills",
+    Base.metadata,
+    Column("user_id", ForeignKey("whatsapp_users.id", ondelete="CASCADE"), primary_key=True),
+    Column("skill_id", ForeignKey("skills.id", ondelete="CASCADE"), primary_key=True),
+    UniqueConstraint("user_id", "skill_id", name="uq_whatsapp_user_skill"),
+)
+
+
+class Skill(Base):
+    """Canonical skill entry used for user matching."""
+
+    __tablename__ = "skills"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True, index=True, nullable=False)
+    users: Mapped[List["WhatsAppUser"]] = relationship(
+        secondary=whatsapp_user_skills,
+        back_populates="skills",
+        lazy="selectin",
+    )

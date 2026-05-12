@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard{% endblock %}
+{% block body_class %}dashboard-page{% endblock %}
+
+{% block content %}
+<div class="wrapper">
+  <div class="header">
+    <h1>Admin Dashboard</h1>
+    <form method="post" action="/logout">
+      <button class="logout-btn" type="submit">Logout</button>
+    </form>
+  </div>
+  <p class="muted">Choose a section to manage data.</p>
+  <section class="cards">
+    <a class="card nav-card" href="/users">
+      <h2>Users</h2>
+      <p class="muted">Open user details, resume status, and matched skills.</p>
+      <p class="metric">{{ users_count }} total users</p>
+      <p class="submetric">{{ users_with_resume_count }} with resume uploaded</p>
+    </a>
+    <a class="card nav-card" href="/skills">
+      <h2>Skills</h2>
+      <p class="muted">Browse all canonical skills and users linked to each skill.</p>
+      <p class="metric">{{ skills_count }} skills</p>
+      <p class="submetric">Click to view all skills</p>
+    </a>
+  </section>
+</div>
+{% endblock %}

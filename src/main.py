@@ -1,6 +1,9 @@
 """FastAPI application factory and router registration."""
 
+from pathlib import Path
+
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from src.config import settings
 from src.db import init_db
@@ -11,6 +14,11 @@ app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description=settings.APP_DESCRIPTION,
+)
+app.mount(
+    "/static",
+    StaticFiles(directory=str(Path(__file__).resolve().parent / "static")),
+    name="static",
 )
 
 app.include_router(core_router)

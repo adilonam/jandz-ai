@@ -25,6 +25,10 @@ class Settings:
         "Keep answers concise and clear."
     )
 
+    ADMIN_LOGIN = os.getenv("ADMIN_LOGIN", "").strip()
+    ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "").strip()
+    ADMIN_SESSION_SECRET = os.getenv("ADMIN_SESSION_SECRET", "").strip()
+
     DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
     @property

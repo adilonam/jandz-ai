@@ -8,9 +8,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.db import get_db
-from src.services.openai_service import generate_openai_reply
-from src.services.user_service import get_or_create_whatsapp_user
-from src.services.whatsapp_service import extract_incoming_user_messages, send_whatsapp_text
+from src.services.openai_service import extract_skills_from_resume, generate_openai_reply
+from src.services.resume_service import extract_text_from_pdf
+from src.services.skill_service import list_skills, set_user_skills_by_names
+from src.services.user_service import get_or_create_whatsapp_user, save_user_resume_pdf
+from src.services.whatsapp_service import (
+    download_whatsapp_media,
+    extract_incoming_user_messages,
+    send_whatsapp_text,
+)
 
 router = APIRouter(prefix="/webhook/whatsapp", tags=["whatsapp"])
 
@@ -57,7 +63,57 @@ async def whatsapp_webhook(
     incoming_messages = extract_incoming_user_messages(payload)
     for message in incoming_messages:
         # Ensure every sender exists in DB; unique key is phone_number.
-        await get_or_create_whatsapp_user(db, phone_number=message.from_wa_id)
+        user = await get_or_create_whatsapp_user(db, phone_number=message.from_wa_id)
+
+        if message.document_id:
+            if message.document_mime_type != "application/pdf":
+                background_tasks.add_task(
+                    send_whatsapp_text,
+                    message.phone_number_id,
+                    message.from_wa_id,
+                    "Please send your resume as a PDF file.",
+                )
+                continue
+
+            pdf_bytes = await download_whatsapp_media(message.document_id)
+            if not pdf_bytes:
+                background_tasks.add_task(
+                    send_whatsapp_text,
+                    message.phone_number_id,
+                    message.from_wa_id,
+                    "I could not download your resume right now. Please send the PDF again.",
+                )
+                continue
+
+            await save_user_resume_pdf(db, user, pdf_bytes)
+
+            resume_text = extract_text_from_pdf(pdf_bytes)
+            skills = await list_skills(db)
+            canonical_skill_names = [skill.name for skill in skills]
+            matched_skill_names = await extract_skills_from_resume(resume_text, canonical_skill_names)
+            matched_skills = await set_user_skills_by_names(db, user, matched_skill_names)
+            skills_text = ", ".join(skill.name for skill in matched_skills) or "none"
+
+            background_tasks.add_task(
+                send_whatsapp_text,
+                message.phone_number_id,
+                message.from_wa_id,
+                f"Thanks, your CV is uploaded. Extracted skills: {skills_text}. You can now send your questions.",
+            )
+            continue
+
+        if not user.resume_pdf:
+            background_tasks.add_task(
+                send_whatsapp_text,
+                message.phone_number_id,
+                message.from_wa_id,
+                "Before we start, please send your CV resume as a PDF file.",
+            )
+            continue
+
+        if not message.text:
+            continue
+
         background_tasks.add_task(
             _reply_with_openai,
             message.phone_number_id,

@@ -1,7 +1,7 @@
 """WhatsApp webhook parsing and send-message helpers."""
 
 from dataclasses import dataclass
-from typing import Any, List
+from typing import Any, List, Optional
 
 import httpx
 
@@ -12,11 +12,13 @@ from src.config import settings
 class IncomingWhatsAppMessage:
     phone_number_id: str
     from_wa_id: str
-    text: str
+    text: Optional[str] = None
+    document_id: Optional[str] = None
+    document_mime_type: Optional[str] = None
 
 
 def extract_incoming_user_messages(payload: Any) -> List[IncomingWhatsAppMessage]:
-    """Extract inbound text messages from WhatsApp webhook payload."""
+    """Extract inbound text and document messages from WhatsApp webhook payload."""
     out: List[IncomingWhatsAppMessage] = []
     if not isinstance(payload, dict) or payload.get("object") != "whatsapp_business_account":
         return out
@@ -34,16 +36,52 @@ def extract_incoming_user_messages(payload: Any) -> List[IncomingWhatsAppMessage
 
             for msg in value.get("messages") or []:
                 sender = str(msg.get("from") or "").strip()
+                if not sender:
+                    continue
+
                 text = str((msg.get("text") or {}).get("body") or "").strip()
-                if sender and text:
+                document = msg.get("document") or {}
+                document_id = str(document.get("id") or "").strip()
+                document_mime_type = str(document.get("mime_type") or "").strip()
+
+                if text or document_id:
                     out.append(
                         IncomingWhatsAppMessage(
                             phone_number_id=str(phone_number_id),
                             from_wa_id=sender,
-                            text=text,
+                            text=text or None,
+                            document_id=document_id or None,
+                            document_mime_type=document_mime_type or None,
                         )
                     )
     return out
+
+
+async def download_whatsapp_media(media_id: str) -> Optional[bytes]:
+    """Download media bytes from WhatsApp Cloud API by media id."""
+    if not settings.WHATSAPP_ACCESS_TOKEN:
+        print("WHATSAPP_ACCESS_TOKEN is not set; cannot download media")
+        return None
+
+    headers = {"Authorization": f"Bearer {settings.WHATSAPP_ACCESS_TOKEN}"}
+    metadata_url = f"https://graph.facebook.com/{settings.WHATSAPP_GRAPH_API_VERSION}/{media_id}"
+
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            metadata_resp = await client.get(metadata_url, headers=headers)
+            metadata_resp.raise_for_status()
+            metadata = metadata_resp.json()
+            download_url = str(metadata.get("url") or "").strip()
+            if not download_url:
+                print(f"WhatsApp media metadata missing URL for media_id={media_id}")
+                return None
+
+            media_resp = await client.get(download_url, headers=headers)
+            media_resp.raise_for_status()
+            return media_resp.content
+    except Exception as exc:
+        print(f"Failed to download WhatsApp media {media_id}: {exc}")
+        return None
 
 
 async def send_whatsapp_text(phone_number_id: str, to_wa_id: str, body: str) -> None:

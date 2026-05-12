@@ -1,5 +1,8 @@
 """OpenAI integration service."""
 
+import json
+from typing import List, Sequence
+
 import httpx
 
 from src.config import settings
@@ -44,3 +47,77 @@ async def generate_openai_reply(user_text: str) -> str:
 
     text = str(content).strip()
     return text or "Sorry, I could not generate a response right now."
+
+
+async def extract_skills_from_resume(
+    resume_text: str,
+    available_skills: Sequence[str],
+) -> List[str]:
+    """Use AI to pick matching canonical skills for a resume."""
+    if not resume_text.strip() or not available_skills:
+        return []
+
+    if not settings.OPENAI_API_KEY:
+        return _fallback_skill_match(resume_text, available_skills)
+
+    system_prompt = (
+        "You extract canonical skills from a CV. "
+        "Return strict JSON only in this shape: "
+        '{"skills": ["Skill 1", "Skill 2"]}. '
+        "Only return skill names that exist in the allowed list exactly."
+    )
+    user_prompt = (
+        "Allowed skills:\n"
+        + "\n".join(f"- {skill}" for skill in available_skills)
+        + "\n\nCV text:\n"
+        + resume_text[:12000]
+    )
+    payload = {
+        "model": settings.OPENAI_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0,
+    }
+    headers = {
+        "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                json=payload,
+                headers=headers,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        content = data["choices"][0]["message"]["content"]
+        parsed = json.loads(str(content))
+        raw_skills = parsed.get("skills") or []
+        if not isinstance(raw_skills, list):
+            return _fallback_skill_match(resume_text, available_skills)
+        allowed_set = set(available_skills)
+        matched = []
+        seen = set()
+        for item in raw_skills:
+            name = str(item).strip()
+            if name in allowed_set and name not in seen:
+                seen.add(name)
+                matched.append(name)
+        return matched
+    except Exception as exc:
+        print(f"Failed to extract skills from CV with OpenAI: {exc}")
+        return _fallback_skill_match(resume_text, available_skills)
+
+
+def _fallback_skill_match(resume_text: str, available_skills: Sequence[str]) -> List[str]:
+    """Naive fallback matcher when AI is unavailable."""
+    lower_text = resume_text.lower()
+    matched = []
+    for skill in available_skills:
+        if skill.lower() in lower_text:
+            matched.append(skill)
+    return matched

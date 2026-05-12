@@ -11,3 +11,5 @@
 5. **Dependencies explicit** — Pin versions in `requirements.txt` or `pyproject.toml`; run tests and linters locally before merging changes that touch API behavior.
 
 - use psql to ask the database credential are on DATABASE_URL
+
+- make a good architecture 

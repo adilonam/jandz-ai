@@ -1,0 +1,5 @@
+
+
+
+-[ ] voice parsing
+-[ ] parse pdf 
