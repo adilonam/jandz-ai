@@ -8,7 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.db import get_db
-from src.services.openai_service import extract_skills_from_resume, generate_openai_reply
+from src.services.openai_service import (
+    extract_skills_from_resume,
+    generate_openai_reply,
+    transcribe_audio_to_text,
+)
 from src.services.resume_service import extract_text_from_pdf
 from src.services.skill_service import list_skills, set_user_skills_by_names
 from src.services.user_service import get_or_create_whatsapp_user, save_user_resume_pdf
@@ -108,6 +112,35 @@ async def whatsapp_webhook(
                 message.phone_number_id,
                 message.from_wa_id,
                 "Before we start, please send your CV resume as a PDF file.",
+            )
+            continue
+
+        if message.audio_id:
+            audio_bytes = await download_whatsapp_media(message.audio_id)
+            if not audio_bytes:
+                background_tasks.add_task(
+                    send_whatsapp_text,
+                    message.phone_number_id,
+                    message.from_wa_id,
+                    "I could not download your audio right now. Please try again.",
+                )
+                continue
+
+            transcript = await transcribe_audio_to_text(audio_bytes, message.audio_mime_type)
+            if not transcript:
+                background_tasks.add_task(
+                    send_whatsapp_text,
+                    message.phone_number_id,
+                    message.from_wa_id,
+                    "I could not understand your audio. Please send a clearer voice note or text.",
+                )
+                continue
+
+            background_tasks.add_task(
+                _reply_with_openai,
+                message.phone_number_id,
+                message.from_wa_id,
+                transcript,
             )
             continue
 

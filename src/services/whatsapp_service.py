@@ -15,10 +15,12 @@ class IncomingWhatsAppMessage:
     text: Optional[str] = None
     document_id: Optional[str] = None
     document_mime_type: Optional[str] = None
+    audio_id: Optional[str] = None
+    audio_mime_type: Optional[str] = None
 
 
 def extract_incoming_user_messages(payload: Any) -> List[IncomingWhatsAppMessage]:
-    """Extract inbound text and document messages from WhatsApp webhook payload."""
+    """Extract inbound text, document, and audio messages from webhook payload."""
     out: List[IncomingWhatsAppMessage] = []
     if not isinstance(payload, dict) or payload.get("object") != "whatsapp_business_account":
         return out
@@ -43,8 +45,11 @@ def extract_incoming_user_messages(payload: Any) -> List[IncomingWhatsAppMessage
                 document = msg.get("document") or {}
                 document_id = str(document.get("id") or "").strip()
                 document_mime_type = str(document.get("mime_type") or "").strip()
+                audio = msg.get("audio") or {}
+                audio_id = str(audio.get("id") or "").strip()
+                audio_mime_type = str(audio.get("mime_type") or "").strip()
 
-                if text or document_id:
+                if text or document_id or audio_id:
                     out.append(
                         IncomingWhatsAppMessage(
                             phone_number_id=str(phone_number_id),
@@ -52,6 +57,8 @@ def extract_incoming_user_messages(payload: Any) -> List[IncomingWhatsAppMessage
                             text=text or None,
                             document_id=document_id or None,
                             document_mime_type=document_mime_type or None,
+                            audio_id=audio_id or None,
+                            audio_mime_type=audio_mime_type or None,
                         )
                     )
     return out

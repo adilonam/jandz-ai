@@ -1,7 +1,7 @@
 """OpenAI integration service."""
 
 import json
-from typing import List, Sequence
+from typing import List, Optional, Sequence
 
 import httpx
 
@@ -121,3 +121,32 @@ def _fallback_skill_match(resume_text: str, available_skills: Sequence[str]) -> 
         if skill.lower() in lower_text:
             matched.append(skill)
     return matched
+
+
+async def transcribe_audio_to_text(
+    audio_bytes: bytes,
+    mime_type: Optional[str] = None,
+) -> str:
+    """Transcribe audio bytes with OpenAI audio transcription API."""
+    if not settings.OPENAI_API_KEY:
+        return ""
+
+    headers = {"Authorization": f"Bearer {settings.OPENAI_API_KEY}"}
+    data = {"model": settings.OPENAI_AUDIO_MODEL}
+    files = {"file": ("voice-note", audio_bytes, mime_type or "audio/ogg")}
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/audio/transcriptions",
+                headers=headers,
+                data=data,
+                files=files,
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+            text = str(payload.get("text") or "").strip()
+            return text
+    except Exception as exc:
+        print(f"OpenAI audio transcription failed: {exc}")
+        return ""
