@@ -10,7 +10,7 @@ from src.config import settings
 
 @dataclass
 class IncomingWhatsAppMessage:
-    phone_number_id: str
+    phone_number_id: Optional[str]
     from_wa_id: str
     text: Optional[str] = None
     document_id: Optional[str] = None
@@ -32,7 +32,7 @@ def extract_incoming_user_messages(payload: Any) -> List[IncomingWhatsAppMessage
                 continue
 
             metadata = value.get("metadata") or {}
-            phone_number_id = metadata.get("phone_number_id")
+            phone_number_id = metadata.get("phone_number_id") or settings.WHATSAPP_PHONE_NUMBER_ID
             if not phone_number_id:
                 continue
 
@@ -52,7 +52,7 @@ def extract_incoming_user_messages(payload: Any) -> List[IncomingWhatsAppMessage
                 if text or document_id or audio_id:
                     out.append(
                         IncomingWhatsAppMessage(
-                            phone_number_id=str(phone_number_id),
+                            phone_number_id=str(phone_number_id) if phone_number_id else None,
                             from_wa_id=sender,
                             text=text or None,
                             document_id=document_id or None,
