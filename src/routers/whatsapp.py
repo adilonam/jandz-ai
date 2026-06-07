@@ -177,9 +177,17 @@ def _infer_query_term(requested_text: str, skill_names: List[str]) -> str:
     return "Software Engineer"
 
 
-def _build_safe_coresignal_tool_prompt(query_term: str) -> str:
+def _build_safe_coresignal_tool_prompt(
+    query_term: str,
+    skills_text: str,
+    work_mode: str,
+    location: str,
+) -> str:
     safe_term = query_term.replace('"', "").strip() or "Software Engineer"
     return (
+        f"Candidate skills from CV: {skills_text}. "
+        f"Preferred work mode: {work_mode}. "
+        f"Preferred location: {location}. "
         "Use the MCP tool coresignal_job_api exactly once with valid JSON arguments. "
         "Do not use bool query. Use this exact shape: "
         '{"query":{"match":{"title":"' + safe_term + '"}},'
@@ -375,8 +383,14 @@ async def _search_jobs_reply_for_user(
         return "I could not find your profile. Please send your CV PDF again."
 
     skill_names = [skill.name for skill in user.skills]
+    skills_text = ", ".join(skill_names) if skill_names else "general profile"
     query_term = _infer_query_term(requested_text, skill_names)
-    prompt = _build_safe_coresignal_tool_prompt(query_term)
+    prompt = _build_safe_coresignal_tool_prompt(
+        query_term=query_term,
+        skills_text=skills_text,
+        work_mode=work_mode,
+        location=location,
+    )
     try:
         payload = await run_coresignal_jobs_prompt(prompt)
         await create_job_search_history(
