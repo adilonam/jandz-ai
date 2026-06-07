@@ -65,6 +65,22 @@ async def save_user_resume_pdf(
     return user
 
 
+async def update_user_job_search_preferences(
+    session: AsyncSession,
+    user: WhatsAppUser,
+    job_search_stage: Optional[str] = None,
+    preferred_work_mode: Optional[str] = None,
+    preferred_job_location: Optional[str] = None,
+) -> WhatsAppUser:
+    """Update user job-search preference state used in WhatsApp flow."""
+    user.job_search_stage = job_search_stage
+    user.preferred_work_mode = preferred_work_mode
+    user.preferred_job_location = preferred_job_location
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
 async def delete_whatsapp_user_by_id(session: AsyncSession, user_id: int) -> bool:
     """Delete a user by id. Returns True if deleted."""
     user = await get_whatsapp_user_by_id(session, user_id)

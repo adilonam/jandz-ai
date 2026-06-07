@@ -1,5 +1,6 @@
 """OpenAI integration service."""
 
+import base64
 import json
 from typing import List, Optional, Sequence
 
@@ -120,6 +121,108 @@ def _fallback_skill_match(resume_text: str, available_skills: Sequence[str]) -> 
     for skill in available_skills:
         if skill.lower() in lower_text:
             matched.append(skill)
+    return matched
+
+
+def _safe_json_loads(raw_content: str) -> Optional[dict]:
+    """Parse JSON payload and tolerate fenced markdown wrappers."""
+    content = raw_content.strip()
+    if content.startswith("```"):
+        lines = content.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        content = "\n".join(lines).strip()
+
+    try:
+        parsed = json.loads(content)
+        if isinstance(parsed, dict):
+            return parsed
+    except Exception:
+        return None
+    return None
+
+
+async def extract_skills_from_resume_pdf(
+    pdf_bytes: bytes,
+    available_skills: Sequence[str],
+) -> List[str]:
+    """Use OpenAI to infer canonical skills from PDF bytes (works for scanned/image CVs)."""
+    if not pdf_bytes or not available_skills or not settings.OPENAI_API_KEY:
+        return []
+
+    encoded_pdf = base64.b64encode(pdf_bytes).decode("ascii")
+    system_prompt = (
+        "You extract canonical skills from CV PDFs. "
+        "Return strict JSON only in this shape: "
+        '{"skills": ["Skill 1", "Skill 2"]}. '
+        "Only return skill names that exist in the allowed list exactly."
+    )
+    user_prompt = (
+        "Allowed skills:\n"
+        + "\n".join(f"- {skill}" for skill in available_skills)
+        + "\n\nAnalyze the attached resume PDF and return matched skills."
+    )
+    payload = {
+        "model": settings.OPENAI_MODEL,
+        "input": [
+            {
+                "role": "system",
+                "content": [{"type": "input_text", "text": system_prompt}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": user_prompt},
+                    {
+                        "type": "input_file",
+                        "filename": "resume.pdf",
+                        "file_data": f"data:application/pdf;base64,{encoded_pdf}",
+                    },
+                ],
+            },
+        ],
+        "temperature": 0,
+    }
+    headers = {
+        "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/responses",
+                json=payload,
+                headers=headers,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as exc:
+        print(f"Failed to extract skills from PDF bytes with OpenAI: {exc}")
+        return []
+
+    raw_content = str(data.get("output_text") or "").strip()
+    if not raw_content:
+        return []
+
+    parsed = _safe_json_loads(raw_content)
+    if not parsed:
+        return []
+
+    raw_skills = parsed.get("skills") or []
+    if not isinstance(raw_skills, list):
+        return []
+
+    allowed_set = set(available_skills)
+    matched = []
+    seen = set()
+    for item in raw_skills:
+        name = str(item).strip()
+        if name in allowed_set and name not in seen:
+            seen.add(name)
+            matched.append(name)
     return matched
 
 

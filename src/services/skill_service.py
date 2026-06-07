@@ -13,7 +13,9 @@ from src.models.whatsapp_user import WhatsAppUser
 async def list_skills(session: AsyncSession) -> List[Skill]:
     """Return all canonical skills ordered by name."""
     result = await session.scalars(
-        select(Skill).options(selectinload(Skill.users)).order_by(Skill.name.asc())
+        select(Skill)
+        .options(selectinload(Skill.users))
+        .order_by(Skill.category.asc(), Skill.name.asc())
     )
     return list(result.all())
 

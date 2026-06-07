@@ -23,6 +23,9 @@ class WhatsAppUser(Base):
     phone_number: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
     display_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     resume_pdf: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
+    job_search_stage: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    preferred_work_mode: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    preferred_job_location: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     skills: Mapped[List["Skill"]] = relationship(
         secondary=whatsapp_user_skills,
         back_populates="users",

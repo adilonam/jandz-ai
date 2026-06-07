@@ -1,0 +1,5 @@
+ id |    provider    |            prompt_preview             | response_type |          created_at           
+----+----------------+---------------------------------------+---------------+-------------------------------
+  1 | coresignal_mcp | test save history row for jobs search | object        | 2026-06-07 18:07:22.925496+00
+(1 row)
+

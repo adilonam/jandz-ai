@@ -24,6 +24,7 @@
         <thead>
           <tr>
             <th>Skill</th>
+            <th>Category</th>
             <th>Users Count</th>
             <th>Users</th>
           </tr>
@@ -33,6 +34,7 @@
             {% for skill in skills %}
             <tr>
               <td>{{ skill.name }}</td>
+              <td>{{ skill.category }}</td>
               <td>{{ skill.users_count }}</td>
               <td>
                 {% if skill.users %}
@@ -47,7 +49,7 @@
             {% endfor %}
           {% else %}
             <tr>
-              <td colspan="3">No skills found.</td>
+              <td colspan="4">No skills found.</td>
             </tr>
           {% endif %}
         </tbody>

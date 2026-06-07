@@ -21,6 +21,7 @@ class Settings:
 
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
     OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
+    CORESIGNAL_API_KEY = os.getenv("CORESIGNAL_API_KEY", "").strip()
     OPENAI_AUDIO_MODEL = (
         os.getenv("OPENAI_AUDIO_MODEL", "gpt-4o-mini-transcribe").strip()
         or "gpt-4o-mini-transcribe"

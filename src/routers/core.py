@@ -4,7 +4,7 @@ import hashlib
 import hmac
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
@@ -13,11 +13,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.db import get_db
-from src.schemas import EchoRequest
+from src.schemas import EchoRequest, McpPromptRequest
 from src.services.conversation_service import (
     list_conversation_user_summaries,
     list_messages_for_user,
 )
+from src.services.job_search_history_service import (
+    count_job_search_history,
+    create_job_search_history,
+    list_job_search_history,
+)
+from src.services.mcp_chat_service import run_coresignal_jobs_prompt
 from src.services.skill_service import list_skills
 from src.services.user_service import (
     delete_whatsapp_user_by_id,
@@ -82,6 +88,7 @@ async def root(request: Request, db: AsyncSession = Depends(get_db)):
 
     users = await list_whatsapp_users(db)
     skills = await list_skills(db)
+    mcp_search_history_count = await count_job_search_history(db)
     users_with_resume = sum(1 for user in users if user.resume_pdf)
     return templates.TemplateResponse(
         request=request,
@@ -89,6 +96,7 @@ async def root(request: Request, db: AsyncSession = Depends(get_db)):
         context={
             "users_count": len(users),
             "skills_count": len(skills),
+            "mcp_search_history_count": mcp_search_history_count,
             "users_with_resume_count": users_with_resume,
         },
     )
@@ -125,6 +133,7 @@ async def skills_page(request: Request, db: AsyncSession = Depends(get_db)):
     skill_rows = [
         {
             "id": skill.id,
+            "category": skill.category,
             "name": skill.name,
             "users_count": len(skill.users),
             "users": [
@@ -199,6 +208,59 @@ async def conversation_detail_page(
             "messages": message_rows,
         },
     )
+
+
+@router.get("/mcp/coresignal")
+async def mcp_coresignal_test_page(request: Request):
+    _require_auth(request)
+    return templates.TemplateResponse(
+        request=request,
+        name="core/mcp_coresignal_test.html",
+        context={},
+    )
+
+
+@router.get("/mcp/search-history")
+async def mcp_search_history_page(request: Request, db: AsyncSession = Depends(get_db)):
+    _require_auth(request)
+    rows = await list_job_search_history(db, limit=200)
+    history_rows = [
+        {
+            "id": row.id,
+            "provider": row.provider,
+            "prompt_query": row.prompt_query,
+            "response_payload": row.response_payload,
+            "created_at": _format_datetime(row.created_at),
+        }
+        for row in rows
+    ]
+    return templates.TemplateResponse(
+        request=request,
+        name="core/mcp_search_history.html",
+        context={"history_rows": history_rows},
+    )
+
+
+@router.post("/api/mcp/coresignal/jobs")
+async def mcp_coresignal_jobs_api(
+    request: Request,
+    body: McpPromptRequest,
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    _require_auth(request)
+    try:
+        payload = await run_coresignal_jobs_prompt(body.prompt)
+        await create_job_search_history(
+            db,
+            prompt_query=body.prompt,
+            response_payload=payload,
+            provider="coresignal_mcp",
+        )
+        return payload
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
 @router.post("/login")

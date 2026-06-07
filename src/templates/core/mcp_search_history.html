@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}MCP Search History{% endblock %}
+{% block body_class %}dashboard-page{% endblock %}
+
+{% block content %}
+<div class="wrapper">
+  <div class="header">
+    <h1>MCP Search History</h1>
+    <div class="header-actions">
+      <a class="download-link" href="/">Dashboard</a>
+      <a class="download-link" href="/mcp/coresignal">Run MCP Search</a>
+      <form method="post" action="/logout">
+        <button class="logout-btn" type="submit">Logout</button>
+      </form>
+    </div>
+  </div>
+
+  <section class="cards">
+    <article class="card">
+      <h2>Saved Searches</h2>
+      <p class="muted">Latest MCP search prompts and raw JSON responses.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Provider</th>
+            <th>Prompt</th>
+            <th>Created At</th>
+            <th>Response JSON</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if history_rows %}
+            {% for row in history_rows %}
+            <tr>
+              <td>{{ row.id }}</td>
+              <td>{{ row.provider }}</td>
+              <td>{{ row.prompt_query }}</td>
+              <td>{{ row.created_at }}</td>
+              <td>
+                <details>
+                  <summary>View JSON</summary>
+                  <pre class="mcp-json-preview">{{ row.response_payload | tojson(indent=2) }}</pre>
+                </details>
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="5">No MCP search history yet.</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </article>
+  </section>
+</div>
+{% endblock %}

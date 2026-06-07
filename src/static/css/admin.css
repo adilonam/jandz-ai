@@ -50,6 +50,20 @@ input {
   margin-bottom: 0.85rem;
 }
 
+textarea {
+  width: 100%;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: #0b1220;
+  color: #e2e8f0;
+  padding: 0.62rem 0.72rem;
+  box-sizing: border-box;
+  margin-bottom: 0.85rem;
+  resize: vertical;
+  min-height: 120px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 button {
   border: 0;
   border-radius: 8px;
@@ -221,39 +235,186 @@ td {
 
 .conversation-card {
   width: 100%;
+  position: relative;
+  overflow: hidden;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0;
+  border-radius: 14px;
 }
 
 .conversation-thread {
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
-  margin-top: 0.9rem;
+  gap: 0.62rem;
+  margin-top: 0;
+  padding: 0.9rem 0.8rem;
+  min-height: 64vh;
+  position: relative;
+  z-index: 1;
 }
 
 .message-row {
-  border: 1px solid #1f2937;
-  border-radius: 10px;
-  padding: 0.65rem 0.75rem;
+  display: flex;
+  width: 100%;
 }
 
 .message-user {
-  background: rgba(15, 118, 110, 0.12);
-  border-color: rgba(15, 118, 110, 0.35);
+  justify-content: flex-start;
 }
 
 .message-assistant {
-  background: rgba(29, 78, 216, 0.12);
-  border-color: rgba(29, 78, 216, 0.35);
+  justify-content: flex-end;
 }
 
-.message-meta {
-  margin: 0 0 0.35rem;
-  font-size: 0.78rem;
-  color: #94a3b8;
-  text-transform: capitalize;
+.message-bubble {
+  max-width: min(74%, 600px);
+  border-radius: 10px;
+  border: 1px solid transparent;
+  padding: 0;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 6px 16px rgba(2, 6, 23, 0.3);
+}
+
+.message-user .message-bubble {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  border-top-left-radius: 4px;
+}
+
+.message-assistant .message-bubble {
+  background: #bfdbfe;
+  border-color: #93c5fd;
+  border-top-right-radius: 4px;
+}
+
+.message-user .message-bubble::before,
+.message-assistant .message-bubble::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  width: 11px;
+  height: 11px;
+  border-top: 1px solid transparent;
+}
+
+.message-user .message-bubble::before {
+  left: -6px;
+  border-left: 1px solid #cbd5e1;
+  background: linear-gradient(135deg, #f1f5f9 50%, transparent 50%);
+}
+
+.message-assistant .message-bubble::before {
+  right: -6px;
+  border-right: 1px solid #93c5fd;
+  background: linear-gradient(225deg, #bfdbfe 50%, transparent 50%);
+}
+
+.message-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.65rem;
+  align-items: baseline;
+  margin: 0;
+  padding: 0.28rem 0.5rem 0.22rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.message-from {
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #1e3a8a;
+}
+
+.message-user .message-from {
+  color: #0f172a;
+}
+
+.message-date {
+  font-size: 0.62rem;
+  color: #334155;
+  opacity: 0.9;
 }
 
 .message-body {
   margin: 0;
+  padding: 0.46rem 0.5rem 0.54rem;
   white-space: pre-wrap;
+  line-height: 1.34;
+  color: #0f172a;
+  font-size: 0.9rem;
+}
+
+.conversation-subtitle {
+  margin: 0;
+}
+
+.whatsapp-shell {
+  background: linear-gradient(180deg, #0a1328 0%, #081327 100%);
+}
+
+.chat-wallpaper {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle at 14% 12%, rgba(96, 165, 250, 0.08) 0, transparent 24%),
+    radial-gradient(circle at 88% 86%, rgba(59, 130, 246, 0.1) 0, transparent 28%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.58) 25%, transparent 25%) 0 0/18px 18px,
+    linear-gradient(225deg, rgba(15, 23, 42, 0.58) 25%, transparent 25%) 0 0/18px 18px;
+  opacity: 0.45;
+}
+
+.mcp-test-card {
+  max-width: 960px;
+}
+
+.mcp-test-form {
+  margin-bottom: 1rem;
+}
+
+.mcp-output-wrap {
+  margin-top: 0.35rem;
+}
+
+.mcp-output {
+  margin: 0;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  background: #020617;
+  color: #cbd5e1;
+  padding: 0.8rem;
+  box-sizing: border-box;
+  overflow: auto;
+  max-height: 55vh;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.mcp-json-preview {
+  margin-top: 0.45rem;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  background: #020617;
+  color: #cbd5e1;
+  padding: 0.6rem;
+  box-sizing: border-box;
+  overflow: auto;
+  max-height: 280px;
+  max-width: 520px;
+  font-size: 0.76rem;
+  line-height: 1.3;
+}
+
+@media (max-width: 720px) {
+  .conversation-thread {
+    min-height: 56vh;
+    padding: 0.72rem 0.58rem;
+  }
+
+  .message-bubble {
+    max-width: 86%;
+  }
 }

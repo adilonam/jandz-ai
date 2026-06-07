@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}MCP CoreSignal Test{% endblock %}
+{% block body_class %}dashboard-page{% endblock %}
+
+{% block content %}
+<div class="wrapper">
+  <div class="header">
+    <h1>MCP CoreSignal Test</h1>
+    <div class="header-actions">
+      <a class="logout-btn" href="/">Back</a>
+      <form method="post" action="/logout">
+        <button class="logout-btn" type="submit">Logout</button>
+      </form>
+    </div>
+  </div>
+
+  <section class="card mcp-test-card">
+    <p class="muted">Type a prompt to ask CoreSignal MCP for jobs. The API returns raw JSON.</p>
+    <form id="mcp-test-form" class="mcp-test-form">
+      <label for="prompt">Prompt</label>
+      <textarea id="prompt" name="prompt" rows="6" placeholder="Example: Find remote Python backend jobs in Morocco, senior level."></textarea>
+      <button id="submit-btn" type="submit">Run Prompt</button>
+    </form>
+
+    <div class="mcp-output-wrap">
+      <p class="muted">JSON response</p>
+      <pre id="mcp-output" class="mcp-output">{}</pre>
+    </div>
+  </section>
+</div>
+
+<script>
+  const form = document.getElementById("mcp-test-form");
+  const promptInput = document.getElementById("prompt");
+  const output = document.getElementById("mcp-output");
+  const submitBtn = document.getElementById("submit-btn");
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const prompt = promptInput.value.trim();
+    if (!prompt) {
+      output.textContent = JSON.stringify({ error: "Prompt is required." }, null, 2);
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Running...";
+    output.textContent = "Waiting for response...";
+
+    try {
+      const response = await fetch("/api/mcp/coresignal/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        output.textContent = JSON.stringify({ status: response.status, error: data }, null, 2);
+      } else {
+        output.textContent = JSON.stringify(data, null, 2);
+      }
+    } catch (error) {
+      output.textContent = JSON.stringify(
+        { error: "Request failed", details: String(error) },
+        null,
+        2,
+      );
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Run Prompt";
+    }
+  });
+</script>
+{% endblock %}

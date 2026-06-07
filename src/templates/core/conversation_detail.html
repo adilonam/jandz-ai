@@ -6,7 +6,10 @@
 {% block content %}
 <div class="wrapper conversation-detail-wrapper">
   <div class="header">
-    <h1>Conversation</h1>
+    <div>
+      <h1>Conversation</h1>
+      <p class="muted conversation-subtitle">Thread with {{ display_name }} ({{ phone_number }})</p>
+    </div>
     <div class="header-actions">
       <a class="download-link" href="/">Dashboard</a>
       <a class="download-link" href="/conversations">Conversations</a>
@@ -19,16 +22,23 @@
   </div>
 
   <section class="cards">
-    <article class="card conversation-card">
-      <h2>{{ display_name }}</h2>
-      <p class="muted">{{ phone_number }}</p>
-
+    <article class="card conversation-card whatsapp-shell">
+      <div class="chat-wallpaper"></div>
       <div class="conversation-thread">
         {% if messages %}
           {% for message in messages %}
           <div class="message-row {{ 'message-user' if message.direction == 'user' else 'message-assistant' }}">
-            <p class="message-meta">{{ message.direction }} | {{ message.created_at }}</p>
-            <p class="message-body">{{ message.text }}</p>
+            <article class="message-bubble message-card">
+              <header class="message-top">
+                {% if message.direction == 'user' %}
+                <span class="message-from">{{ phone_number }}</span>
+                {% else %}
+                <span class="message-from">Jandz AI</span>
+                {% endif %}
+                <span class="message-date">{{ message.created_at }}</span>
+              </header>
+              <p class="message-body">{{ message.text }}</p>
+            </article>
           </div>
           {% endfor %}
         {% else %}
