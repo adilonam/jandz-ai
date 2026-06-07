@@ -10,7 +10,7 @@ load_dotenv()
 class Settings:
     """Environment-driven settings for the API."""
 
-    APP_NAME = "jandz-ai API"
+    APP_NAME = os.getenv("APP_NAME", "jandz-ai").strip() or "jandz-ai"
     APP_VERSION = "0.1.0"
     APP_DESCRIPTION = "WhatsApp + OpenAI FastAPI service."
 
@@ -26,6 +26,7 @@ class Settings:
         os.getenv("OPENAI_AUDIO_MODEL", "gpt-4o-mini-transcribe").strip()
         or "gpt-4o-mini-transcribe"
     )
+    JOBS_TO_SHOW = max(1, int((os.getenv("JOBS_TO_SHOW", "5") or "5").strip()))
     OPENAI_SYSTEM_PROMPT = (
         "You are a helpful assistant chatting with users on WhatsApp. "
         "Keep answers concise and clear."

@@ -118,7 +118,7 @@ def _format_jobs_from_mcp_output(raw_output: Any) -> str:
             line = f"{line} - {url}"
         lines.append(line)
         shown += 1
-        if shown >= 5:
+        if shown >= settings.JOBS_TO_SHOW:
             break
 
     if shown == 0:
@@ -216,8 +216,9 @@ def _format_filtered_jobs_reply(
     jobs: List[Dict[str, Any]],
     location: str,
     work_mode: str,
-    limit: int = 5,
+    limit: Optional[int] = None,
 ) -> str:
+    max_jobs = limit if limit is not None else settings.JOBS_TO_SHOW
     location_lower = location.lower().strip()
 
     def score(row: Dict[str, Any]) -> int:
@@ -235,11 +236,11 @@ def _format_filtered_jobs_reply(
         if not _matches_work_mode(row, work_mode):
             continue
         picked.append(row)
-        if len(picked) >= limit:
+        if len(picked) >= max_jobs:
             break
 
     if not picked:
-        picked = sorted_rows[:limit]
+        picked = sorted_rows[:max_jobs]
 
     if not picked:
         return "I could not find matching jobs right now. Please try again in a few minutes."
@@ -390,7 +391,7 @@ async def _search_jobs_reply_for_user(
                 jobs,
                 location=location,
                 work_mode=work_mode,
-                limit=5,
+                limit=settings.JOBS_TO_SHOW,
             )
 
         jobs_reply = _extract_output_text(payload)
