@@ -14,6 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.config import settings
 from src.db import get_db
 from src.schemas import EchoRequest
+from src.services.conversation_service import (
+    list_conversation_user_summaries,
+    list_messages_for_user,
+)
 from src.services.skill_service import list_skills
 from src.services.user_service import (
     delete_whatsapp_user_by_id,
@@ -138,6 +142,62 @@ async def skills_page(request: Request, db: AsyncSession = Depends(get_db)):
         request=request,
         name="core/skills.html",
         context={"skills": skill_rows},
+    )
+
+
+@router.get("/conversations")
+async def conversations_page(request: Request, db: AsyncSession = Depends(get_db)):
+    _require_auth(request)
+
+    conversations = await list_conversation_user_summaries(db)
+    conversation_rows = [
+        {
+            "user_id": row["user_id"],
+            "phone_number": row["phone_number"],
+            "display_name": row["display_name"],
+            "messages_count": row["messages_count"],
+            "last_message_at": _format_datetime(row["last_message_at"]),
+        }
+        for row in conversations
+    ]
+
+    return templates.TemplateResponse(
+        request=request,
+        name="core/conversations.html",
+        context={"conversations": conversation_rows},
+    )
+
+
+@router.get("/conversations/{user_id}")
+async def conversation_detail_page(
+    user_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    _require_auth(request)
+
+    user = await get_whatsapp_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    messages = await list_messages_for_user(db, user_id=user_id)
+    message_rows = [
+        {
+            "direction": message.direction,
+            "text": message.text,
+            "created_at": _format_datetime(message.created_at),
+        }
+        for message in messages
+    ]
+
+    return templates.TemplateResponse(
+        request=request,
+        name="core/conversation_detail.html",
+        context={
+            "phone_number": user.phone_number,
+            "display_name": user.display_name or "-",
+            "messages": message_rows,
+        },
     )
 
 

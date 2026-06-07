@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Conversation Detail{% endblock %}
+{% block body_class %}dashboard-page{% endblock %}
+
+{% block content %}
+<div class="wrapper conversation-detail-wrapper">
+  <div class="header">
+    <h1>Conversation</h1>
+    <div class="header-actions">
+      <a class="download-link" href="/">Dashboard</a>
+      <a class="download-link" href="/conversations">Conversations</a>
+      <a class="download-link" href="/users">Users</a>
+      <a class="download-link" href="/skills">Skills</a>
+      <form method="post" action="/logout">
+        <button class="logout-btn" type="submit">Logout</button>
+      </form>
+    </div>
+  </div>
+
+  <section class="cards">
+    <article class="card conversation-card">
+      <h2>{{ display_name }}</h2>
+      <p class="muted">{{ phone_number }}</p>
+
+      <div class="conversation-thread">
+        {% if messages %}
+          {% for message in messages %}
+          <div class="message-row {{ 'message-user' if message.direction == 'user' else 'message-assistant' }}">
+            <p class="message-meta">{{ message.direction }} | {{ message.created_at }}</p>
+            <p class="message-body">{{ message.text }}</p>
+          </div>
+          {% endfor %}
+        {% else %}
+          <p class="muted">No messages for this user.</p>
+        {% endif %}
+      </div>
+    </article>
+  </section>
+</div>
+{% endblock %}

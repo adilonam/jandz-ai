@@ -10,6 +10,7 @@ from src.db import Base
 from src.models.skill import whatsapp_user_skills
 
 if TYPE_CHECKING:
+    from src.models.conversation_message import ConversationMessage
     from src.models.skill import Skill
 
 
@@ -26,6 +27,10 @@ class WhatsAppUser(Base):
         secondary=whatsapp_user_skills,
         back_populates="users",
         lazy="selectin",
+    )
+    conversation_messages: Mapped[List["ConversationMessage"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Conversations{% endblock %}
+{% block body_class %}dashboard-page{% endblock %}
+
+{% block content %}
+<div class="wrapper">
+  <div class="header">
+    <h1>WhatsApp Conversations</h1>
+    <div class="header-actions">
+      <a class="download-link" href="/">Dashboard</a>
+      <a class="download-link" href="/users">Users</a>
+      <a class="download-link" href="/skills">Skills</a>
+      <form method="post" action="/logout">
+        <button class="logout-btn" type="submit">Logout</button>
+      </form>
+    </div>
+  </div>
+  <section class="cards">
+    <article class="card">
+      <h2>Conversation Index</h2>
+      <p class="muted">Each user has one conversation thread. Click View to open it.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Phone</th>
+            <th>Name</th>
+            <th>Messages</th>
+            <th>Last Message</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if conversations %}
+            {% for conversation in conversations %}
+            <tr>
+              <td>{{ conversation.phone_number }}</td>
+              <td>{{ conversation.display_name }}</td>
+              <td>{{ conversation.messages_count }}</td>
+              <td>{{ conversation.last_message_at }}</td>
+              <td>
+                <a class="download-link" href="/conversations/{{ conversation.user_id }}">View</a>
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="5">No conversations yet.</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </article>
+  </section>
+</div>
+{% endblock %}

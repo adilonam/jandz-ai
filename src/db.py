@@ -51,6 +51,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 async def init_db() -> None:
     """Create DB tables for first-run/dev environments."""
+    from src.models.conversation_message import ConversationMessage  # noqa: F401
     from src.models.whatsapp_user import WhatsAppUser  # noqa: F401
     from src.models.skill import Skill  # noqa: F401
 

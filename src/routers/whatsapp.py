@@ -7,7 +7,8 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
-from src.db import get_db
+from src.db import SessionLocal, get_db
+from src.services.conversation_service import create_conversation_message
 from src.services.openai_service import (
     extract_skills_from_resume,
     generate_openai_reply,
@@ -34,6 +35,33 @@ def _query(request: Request, dotted: str, underscored: str) -> Optional[str]:
 async def _reply_with_openai(phone_number_id: str, from_id: str, incoming_text: str) -> None:
     reply_text = await generate_openai_reply(incoming_text)
     await send_whatsapp_text(phone_number_id, from_id, reply_text)
+
+
+async def _send_and_log_text(
+    phone_number_id: str,
+    from_id: str,
+    user_id: int,
+    body: str,
+) -> None:
+    await send_whatsapp_text(phone_number_id, from_id, body)
+    async with SessionLocal() as session:
+        await create_conversation_message(
+            session,
+            user_id=user_id,
+            direction="assistant",
+            text=body,
+            channel="whatsapp",
+        )
+
+
+async def _reply_with_openai_and_log(
+    phone_number_id: str,
+    from_id: str,
+    user_id: int,
+    incoming_text: str,
+) -> None:
+    reply_text = await generate_openai_reply(incoming_text)
+    await _send_and_log_text(phone_number_id, from_id, user_id, reply_text)
 
 
 @router.get("")
@@ -74,12 +102,22 @@ async def whatsapp_webhook(
         # Ensure every sender exists in DB; unique key is phone_number.
         user = await get_or_create_whatsapp_user(db, phone_number=message.from_wa_id)
 
+        if message.text:
+            await create_conversation_message(
+                db,
+                user_id=user.id,
+                direction="user",
+                text=message.text,
+                channel="whatsapp",
+            )
+
         if message.document_id:
             if message.document_mime_type != "application/pdf":
                 background_tasks.add_task(
-                    send_whatsapp_text,
+                    _send_and_log_text,
                     reply_phone_number_id,
                     message.from_wa_id,
+                    user.id,
                     "Please send your resume as a PDF file.",
                 )
                 continue
@@ -87,9 +125,10 @@ async def whatsapp_webhook(
             pdf_bytes = await download_whatsapp_media(message.document_id)
             if not pdf_bytes:
                 background_tasks.add_task(
-                    send_whatsapp_text,
+                    _send_and_log_text,
                     reply_phone_number_id,
                     message.from_wa_id,
+                    user.id,
                     "I could not download your resume right now. Please send the PDF again.",
                 )
                 continue
@@ -104,18 +143,20 @@ async def whatsapp_webhook(
             skills_text = ", ".join(skill.name for skill in matched_skills) or "none"
 
             background_tasks.add_task(
-                send_whatsapp_text,
+                _send_and_log_text,
                 reply_phone_number_id,
                 message.from_wa_id,
+                user.id,
                 f"Thanks, your CV is uploaded. Extracted skills: {skills_text}. You can now send your questions.",
             )
             continue
 
         if not user.resume_pdf:
             background_tasks.add_task(
-                send_whatsapp_text,
+                _send_and_log_text,
                 reply_phone_number_id,
                 message.from_wa_id,
+                user.id,
                 "Before we start, please send your CV resume as a PDF file.",
             )
             continue
@@ -124,9 +165,10 @@ async def whatsapp_webhook(
             audio_bytes = await download_whatsapp_media(message.audio_id)
             if not audio_bytes:
                 background_tasks.add_task(
-                    send_whatsapp_text,
+                    _send_and_log_text,
                     reply_phone_number_id,
                     message.from_wa_id,
+                    user.id,
                     "I could not download your audio right now. Please try again.",
                 )
                 continue
@@ -134,17 +176,19 @@ async def whatsapp_webhook(
             transcript = await transcribe_audio_to_text(audio_bytes, message.audio_mime_type)
             if not transcript:
                 background_tasks.add_task(
-                    send_whatsapp_text,
+                    _send_and_log_text,
                     reply_phone_number_id,
                     message.from_wa_id,
+                    user.id,
                     "I could not understand your audio. Please send a clearer voice note or text.",
                 )
                 continue
 
             background_tasks.add_task(
-                _reply_with_openai,
+                _reply_with_openai_and_log,
                 reply_phone_number_id,
                 message.from_wa_id,
+                user.id,
                 transcript,
             )
             continue
@@ -153,9 +197,10 @@ async def whatsapp_webhook(
             continue
 
         background_tasks.add_task(
-            _reply_with_openai,
+            _reply_with_openai_and_log,
             reply_phone_number_id,
             message.from_wa_id,
+            user.id,
             message.text,
         )
 

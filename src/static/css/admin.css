@@ -194,6 +194,11 @@ td {
   vertical-align: top;
 }
 
+td {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .badge {
   display: inline-block;
   margin: 0 0.35rem 0.35rem 0;
@@ -202,4 +207,53 @@ td {
   padding: 0.2rem 0.55rem;
   font-size: 0.78rem;
   color: #cbd5e1;
+}
+
+.badge-user {
+  border-color: #0f766e;
+  color: #99f6e4;
+}
+
+.badge-assistant {
+  border-color: #1d4ed8;
+  color: #bfdbfe;
+}
+
+.conversation-card {
+  width: 100%;
+}
+
+.conversation-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.9rem;
+}
+
+.message-row {
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+}
+
+.message-user {
+  background: rgba(15, 118, 110, 0.12);
+  border-color: rgba(15, 118, 110, 0.35);
+}
+
+.message-assistant {
+  background: rgba(29, 78, 216, 0.12);
+  border-color: rgba(29, 78, 216, 0.35);
+}
+
+.message-meta {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  color: #94a3b8;
+  text-transform: capitalize;
+}
+
+.message-body {
+  margin: 0;
+  white-space: pre-wrap;
 }
