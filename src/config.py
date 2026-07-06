@@ -1,6 +1,8 @@
 """Application configuration."""
 
 import os
+from typing import Dict
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from dotenv import load_dotenv
 
@@ -43,11 +45,42 @@ class Settings:
 
     @property
     def ASYNC_DATABASE_URL(self) -> str:
-        if self.DATABASE_URL.startswith("postgresql://"):
-            return self.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
-        if self.DATABASE_URL.startswith("postgres://"):
-            return self.DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
-        return self.DATABASE_URL
+        """Return a SQLAlchemy asyncpg URL compatible with common hosted Postgres URLs."""
+        if not self.DATABASE_URL:
+            return self.DATABASE_URL
+
+        parsed = urlsplit(self.DATABASE_URL)
+        scheme = parsed.scheme
+        if scheme == "postgresql":
+            scheme = "postgresql+asyncpg"
+        elif scheme == "postgres":
+            scheme = "postgresql+asyncpg"
+        else:
+            return self.DATABASE_URL
+
+        query_params = [
+            (key, value)
+            for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+            if key != "sslmode"
+        ]
+        return urlunsplit(
+            (
+                scheme,
+                parsed.netloc,
+                parsed.path,
+                urlencode(query_params),
+                parsed.fragment,
+            )
+        )
+
+    @property
+    def DB_CONNECT_ARGS(self) -> Dict[str, bool]:
+        """Map libpq-style sslmode to asyncpg's ssl argument."""
+        parsed = urlsplit(self.DATABASE_URL)
+        sslmode = dict(parse_qsl(parsed.query, keep_blank_values=True)).get("sslmode")
+        if sslmode in {"require", "verify-ca", "verify-full"}:
+            return {"ssl": True}
+        return {}
 
 
 settings = Settings()

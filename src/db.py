@@ -18,6 +18,7 @@ if not settings.ASYNC_DATABASE_URL:
 
 engine = create_async_engine(
     settings.ASYNC_DATABASE_URL,
+    connect_args=settings.DB_CONNECT_ARGS,
     pool_pre_ping=True,
 )
 SessionLocal = async_sessionmaker(
