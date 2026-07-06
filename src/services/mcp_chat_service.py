@@ -7,6 +7,11 @@ import httpx
 from src.config import settings
 
 CORESIGNAL_MCP_URL = "https://mcp.coresignal.com/mcp"
+CORESIGNAL_MULTI_SOURCE_INSTRUCTION = (
+    "When searching jobs with CoreSignal MCP, prioritize coresignal_job_api first and "
+    "use coresignal_company_multisource_api and/or coresignal_employee_multisource_api "
+    "to enrich or validate results when helpful."
+)
 
 
 async def run_coresignal_jobs_prompt(prompt: str) -> Dict[str, Any]:
@@ -16,9 +21,11 @@ async def run_coresignal_jobs_prompt(prompt: str) -> Dict[str, Any]:
     if not settings.CORESIGNAL_API_KEY:
         raise ValueError("CORESIGNAL_API_KEY is missing.")
 
+    augmented_prompt = f"{CORESIGNAL_MULTI_SOURCE_INSTRUCTION}\n\n{prompt.strip()}"
+
     payload = {
         "model": settings.OPENAI_MODEL,
-        "input": prompt,
+        "input": augmented_prompt,
         "tools": [
             {
                 "type": "mcp",

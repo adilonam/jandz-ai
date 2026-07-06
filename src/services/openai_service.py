@@ -2,6 +2,7 @@
 
 import base64
 import json
+import re
 from typing import List, Optional, Sequence
 
 import httpx
@@ -142,6 +143,146 @@ def _safe_json_loads(raw_content: str) -> Optional[dict]:
     except Exception:
         return None
     return None
+
+
+def _normalize_full_name(name: str) -> Optional[str]:
+    candidate = " ".join(name.strip().split())
+    if not candidate or len(candidate) < 4 or len(candidate) > 120:
+        return None
+
+    if not re.fullmatch(r"[A-Za-z][A-Za-z\s\-'.]{2,119}", candidate):
+        return None
+
+    blocked = {
+        "curriculum vitae",
+        "resume",
+        "cv",
+        "professional summary",
+        "experience",
+        "education",
+    }
+    if candidate.lower() in blocked:
+        return None
+
+    parts = [p for p in candidate.split(" ") if p]
+    if len(parts) < 2:
+        return None
+    return candidate
+
+
+def _fallback_extract_full_name_from_resume_text(resume_text: str) -> Optional[str]:
+    for raw_line in resume_text.splitlines()[:12]:
+        line = raw_line.strip()
+        if not line:
+            continue
+        normalized = _normalize_full_name(line)
+        if normalized:
+            return normalized
+    return None
+
+
+async def extract_full_name_from_resume(resume_text: str) -> Optional[str]:
+    """Extract candidate full name from parsed CV text."""
+    if not resume_text.strip():
+        return None
+
+    if not settings.OPENAI_API_KEY:
+        return _fallback_extract_full_name_from_resume_text(resume_text)
+
+    system_prompt = (
+        "Extract the candidate full name from CV text. "
+        "Return strict JSON only in this shape: {\"full_name\": \"First Last\"}. "
+        "If unknown, return {\"full_name\": \"\"}."
+    )
+    payload = {
+        "model": settings.OPENAI_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": resume_text[:12000]},
+        ],
+        "temperature": 0,
+    }
+    headers = {
+        "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                json=payload,
+                headers=headers,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            content = str(data["choices"][0]["message"]["content"])
+    except Exception as exc:
+        print(f"Failed to extract full name from CV text with OpenAI: {exc}")
+        return _fallback_extract_full_name_from_resume_text(resume_text)
+
+    parsed = _safe_json_loads(content)
+    if not parsed:
+        return _fallback_extract_full_name_from_resume_text(resume_text)
+
+    return _normalize_full_name(str(parsed.get("full_name") or ""))
+
+
+async def extract_full_name_from_resume_pdf(pdf_bytes: bytes) -> Optional[str]:
+    """Extract candidate full name from resume PDF bytes."""
+    if not pdf_bytes or not settings.OPENAI_API_KEY:
+        return None
+
+    encoded_pdf = base64.b64encode(pdf_bytes).decode("ascii")
+    system_prompt = (
+        "Extract the candidate full name from the attached CV PDF. "
+        "Return strict JSON only in this shape: {\"full_name\": \"First Last\"}. "
+        "If unknown, return {\"full_name\": \"\"}."
+    )
+    payload = {
+        "model": settings.OPENAI_MODEL,
+        "input": [
+            {
+                "role": "system",
+                "content": [{"type": "input_text", "text": system_prompt}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_file",
+                        "filename": "resume.pdf",
+                        "file_data": f"data:application/pdf;base64,{encoded_pdf}",
+                    }
+                ],
+            },
+        ],
+        "temperature": 0,
+    }
+    headers = {
+        "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/responses",
+                json=payload,
+                headers=headers,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as exc:
+        print(f"Failed to extract full name from CV PDF with OpenAI: {exc}")
+        return None
+
+    raw_content = str(data.get("output_text") or "").strip()
+    parsed = _safe_json_loads(raw_content)
+    if not parsed:
+        return None
+
+    return _normalize_full_name(str(parsed.get("full_name") or ""))
 
 
 async def extract_skills_from_resume_pdf(

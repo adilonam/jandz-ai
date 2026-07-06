@@ -81,6 +81,21 @@ async def update_user_job_search_preferences(
     return user
 
 
+async def update_user_display_name(
+    session: AsyncSession,
+    user: WhatsAppUser,
+    display_name: str,
+) -> WhatsAppUser:
+    """Update user display name from CV extraction."""
+    cleaned = display_name.strip()
+    if not cleaned:
+        return user
+    user.display_name = cleaned
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
 async def delete_whatsapp_user_by_id(session: AsyncSession, user_id: int) -> bool:
     """Delete a user by id. Returns True if deleted."""
     user = await get_whatsapp_user_by_id(session, user_id)

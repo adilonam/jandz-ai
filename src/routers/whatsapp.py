@@ -17,6 +17,8 @@ from src.services.conversation_service import create_conversation_message
 from src.services.job_search_history_service import create_job_search_history
 from src.services.mcp_chat_service import run_coresignal_jobs_prompt
 from src.services.openai_service import (
+    extract_full_name_from_resume,
+    extract_full_name_from_resume_pdf,
     extract_skills_from_resume_pdf,
     extract_skills_from_resume,
     generate_openai_reply,
@@ -27,6 +29,7 @@ from src.services.skill_service import list_skills, set_user_skills_by_names
 from src.services.user_service import (
     get_or_create_whatsapp_user,
     save_user_resume_pdf,
+    update_user_display_name,
     update_user_job_search_preferences,
 )
 from src.services.whatsapp_service import (
@@ -187,13 +190,17 @@ def _build_safe_coresignal_tool_prompt(
     return (
         f"Candidate skills from CV: {skills_text}. "
         f"Preferred work mode: {work_mode}. "
-        f"Preferred location: {location}. "
-        "Use the MCP tool coresignal_job_api exactly once with valid JSON arguments. "
-        "Do not use bool query. Use this exact shape: "
+        f"Preferred location/country: {location}. "
+        "First call the MCP tool coresignal_job_api with valid JSON arguments. "
+        "Do not use bool query. Use this exact shape for the job call: "
         '{"query":{"match":{"title":"' + safe_term + '"}},'
         '"keys":["id","title","description","location","company_name","url","country"],'
         '"limit":20}. '
-        "After the tool call, return a short confirmation sentence."
+        "After the job call, you may optionally use coresignal_company_multisource_api and/or "
+        "coresignal_employee_multisource_api to enrich and validate relevance before answering. "
+        "Only return jobs in the exact requested location/country. "
+        "Do not include jobs from other countries. "
+        "Keep the final response concise and focused on matching jobs."
     )
 
 
@@ -220,6 +227,17 @@ def _matches_work_mode(row: Dict[str, Any], work_mode: str) -> bool:
     return True
 
 
+def _matches_requested_country(row: Dict[str, Any], location: str) -> bool:
+    requested = location.strip().lower()
+    if not requested:
+        return True
+
+    row_location = str(row.get("location") or "").lower()
+    row_country = str(row.get("country") or "").lower()
+    haystack = f"{row_location} {row_country}".strip()
+    return requested in haystack
+
+
 def _format_filtered_jobs_reply(
     jobs: List[Dict[str, Any]],
     location: str,
@@ -241,6 +259,8 @@ def _format_filtered_jobs_reply(
     sorted_rows = sorted(jobs, key=score, reverse=True)
     picked: List[Dict[str, Any]] = []
     for row in sorted_rows:
+        if not _matches_requested_country(row, location):
+            continue
         if not _matches_work_mode(row, work_mode):
             continue
         picked.append(row)
@@ -248,10 +268,10 @@ def _format_filtered_jobs_reply(
             break
 
     if not picked:
-        picked = sorted_rows[:max_jobs]
-
-    if not picked:
-        return "I could not find matching jobs right now. Please try again in a few minutes."
+        return (
+            f"I could not find matching {work_mode} jobs in {location} right now. "
+            "Please try a nearby city/country or another role keyword."
+        )
 
     lines = [f"Here are {len(picked)} matching {work_mode} job opportunities:"]
     for idx, row in enumerate(picked, start=1):
@@ -489,6 +509,15 @@ async def whatsapp_webhook(
             await save_user_resume_pdf(db, user, pdf_bytes)
 
             resume_text = extract_text_from_pdf(pdf_bytes)
+            extracted_full_name: Optional[str] = None
+            if resume_text.strip():
+                extracted_full_name = await extract_full_name_from_resume(resume_text)
+            else:
+                extracted_full_name = await extract_full_name_from_resume_pdf(pdf_bytes)
+
+            if extracted_full_name:
+                await update_user_display_name(db, user, extracted_full_name)
+
             skills = await list_skills(db)
             canonical_skill_names = [skill.name for skill in skills]
             if resume_text.strip():
