@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 
-{% block title %}MCP Search History{% endblock %}
+{% block title %}Job Search History{% endblock %}
 {% block body_class %}dashboard-page{% endblock %}
 
 {% block content %}
 <div class="wrapper">
   <div class="header">
-    <h1>MCP Search History</h1>
+    <h1>Job Search History</h1>
     <div class="header-actions">
       <a class="download-link" href="/">Dashboard</a>
-      <a class="download-link" href="/mcp/coresignal">Run MCP Search</a>
+      <a class="download-link" href="/coresignal">Run CoreSignal Search</a>
       <form method="post" action="/logout">
         <button class="logout-btn" type="submit">Logout</button>
       </form>
@@ -19,8 +19,8 @@
   <section class="cards">
     <article class="card">
       <h2>Saved Searches</h2>
-      <p class="muted">Latest MCP search prompts and raw JSON responses.</p>
-      <table>
+      <p class="muted">Latest CoreSignal job search requests and response summaries.</p>
+      <table class="search-history-table">
         <thead>
           <tr>
             <th>ID</th>
@@ -36,10 +36,20 @@
             <tr>
               <td>{{ row.id }}</td>
               <td>{{ row.provider }}</td>
-              <td>{{ row.prompt_query }}</td>
+              <td class="prompt-cell">
+                {% set prompt = row.prompt_query or '' %}
+                {% if prompt|length > 140 %}
+                <details class="raw-json-details">
+                  <summary>View prompt</summary>
+                  <pre class="mcp-json-preview">{{ prompt }}</pre>
+                </details>
+                {% else %}
+                {{ prompt }}
+                {% endif %}
+              </td>
               <td>{{ row.created_at }}</td>
               <td>
-                <details>
+                <details class="raw-json-details">
                   <summary>View JSON</summary>
                   <pre class="mcp-json-preview">{{ row.response_payload | tojson(indent=2) }}</pre>
                 </details>
@@ -48,7 +58,7 @@
             {% endfor %}
           {% else %}
             <tr>
-              <td colspan="5">No MCP search history yet.</td>
+              <td colspan="5">No job search history yet.</td>
             </tr>
           {% endif %}
         </tbody>

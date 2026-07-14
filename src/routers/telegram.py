@@ -14,9 +14,10 @@ from src.routers.whatsapp import (
     JOB_STAGE_AWAITING_LOCATION,
     JOB_STAGE_AWAITING_WORK_MODE,
     _append_job_search_cta,
-    _extract_location_from_text,
+    _clean_location_candidate,
     _is_job_search_request,
     _normalize_work_mode,
+    _resolve_location_text,
     _search_jobs_reply_for_user,
 )
 from src.services.conversation_service import create_conversation_message
@@ -50,13 +51,13 @@ def _telegram_user_key(chat_id: int) -> str:
 
 
 async def _send_and_log_text(chat_id: int, user_id: int, body: str) -> None:
-    await send_telegram_text(chat_id, body)
+    sent_body = await send_telegram_text(chat_id, body)
     async with SessionLocal() as session:
         await create_conversation_message(
             session,
             user_id=user_id,
             direction="assistant",
-            text=body,
+            text=sent_body,
             channel="telegram",
         )
 
@@ -225,8 +226,12 @@ async def telegram_webhook(
         if _is_job_search_request(incoming_text):
             requested_work_mode = _normalize_work_mode(incoming_text) or user.preferred_work_mode
             requested_location = (
-                _extract_location_from_text(incoming_text) or user.preferred_job_location
+                _resolve_location_text(incoming_text) or user.preferred_job_location
             )
+            if requested_location:
+                requested_location = (
+                    _clean_location_candidate(requested_location) or requested_location
+                )
 
             if requested_work_mode and requested_location:
                 await update_user_job_search_preferences(
@@ -325,7 +330,7 @@ async def telegram_webhook(
             continue
 
         if user.job_search_stage == JOB_STAGE_AWAITING_LOCATION:
-            location = message.text.strip()
+            location = _resolve_location_text(message.text) or message.text.strip()
             if len(location) < 2:
                 background_tasks.add_task(
                     _send_and_log_text,
