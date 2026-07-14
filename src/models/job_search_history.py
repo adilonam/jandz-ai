@@ -15,7 +15,7 @@ class JobSearchHistory(Base):
     __tablename__ = "job_search_history"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    provider: Mapped[str] = mapped_column(String(48), nullable=False, default="coresignal_mcp")
+    provider: Mapped[str] = mapped_column(String(48), nullable=False, default="coresignal_api")
     prompt_query: Mapped[str] = mapped_column(Text, nullable=False)
     response_payload: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

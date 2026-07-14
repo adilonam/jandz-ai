@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}MCP CoreSignal Test{% endblock %}
+{% block title %}CoreSignal Jobs Test{% endblock %}
 {% block body_class %}dashboard-page{% endblock %}
 
 {% block content %}
 <div class="wrapper">
   <div class="header">
-    <h1>MCP CoreSignal Test</h1>
+    <h1>CoreSignal Jobs Test</h1>
     <div class="header-actions">
+      <a class="download-link" href="/mcp/search-history">Search history</a>
       <a class="logout-btn" href="/">Back</a>
       <form method="post" action="/logout">
         <button class="logout-btn" type="submit">Logout</button>
@@ -16,61 +17,242 @@
   </div>
 
   <section class="card mcp-test-card">
-    <p class="muted">Type a prompt to ask CoreSignal MCP for jobs. The API returns raw JSON.</p>
-    <form id="mcp-test-form" class="mcp-test-form">
-      <label for="prompt">Prompt</label>
-      <textarea id="prompt" name="prompt" rows="6" placeholder="Example: Find remote Python backend jobs in Morocco, senior level."></textarea>
-      <button id="submit-btn" type="submit">Run Prompt</button>
+    <p class="muted">
+      Search Multi-source Jobs via the CoreSignal REST API
+      (<code>search/es_dsl</code> + <code>collect</code>).
+    </p>
+
+    <form id="coresignal-test-form" class="mcp-test-form">
+      <label for="title">Job title / query</label>
+      <input id="title" name="title" type="text" placeholder="Example: product manager" required />
+
+      <label for="location">Location</label>
+      <input id="location" name="location" type="text" placeholder="Example: Los Angeles" />
+
+      <div class="form-row">
+        <div class="form-field">
+          <label for="work_mode">Work mode</label>
+          <select id="work_mode" name="work_mode">
+            <option value="">Any</option>
+            <option value="remote">Remote</option>
+            <option value="onsite">Onsite</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label for="limit">Limit (optional)</label>
+          <input
+            id="limit"
+            name="limit"
+            type="number"
+            min="1"
+            max="100"
+            placeholder="Default from JOBS_TO_SHOW"
+          />
+        </div>
+      </div>
+
+      <button id="submit-btn" type="submit">Run Search</button>
     </form>
 
-    <div class="mcp-output-wrap">
-      <p class="muted">JSON response</p>
-      <pre id="mcp-output" class="mcp-output">{}</pre>
+    <div id="error-box" class="api-error" hidden></div>
+
+    <div id="results" class="coresignal-results" hidden>
+      <div class="result-section">
+        <h2>Request summary</h2>
+        <dl id="request-summary" class="result-summary"></dl>
+      </div>
+
+      <div class="result-section">
+        <h2>Search</h2>
+        <dl id="search-summary" class="result-summary"></dl>
+        <p class="muted result-ids-label">Job IDs</p>
+        <pre id="job-ids" class="mcp-output job-ids-output">[]</pre>
+      </div>
+
+      <div class="result-section">
+        <h2>Jobs <span id="jobs-count" class="muted"></span></h2>
+        <div id="jobs-list" class="jobs-list"></div>
+        <p id="collect-errors" class="api-error" hidden></p>
+      </div>
+
+      <details class="raw-json-details">
+        <summary>Raw JSON response</summary>
+        <pre id="raw-json" class="mcp-output">{}</pre>
+      </details>
     </div>
   </section>
 </div>
 
 <script>
-  const form = document.getElementById("mcp-test-form");
-  const promptInput = document.getElementById("prompt");
-  const output = document.getElementById("mcp-output");
+  const form = document.getElementById("coresignal-test-form");
+  const titleInput = document.getElementById("title");
+  const locationInput = document.getElementById("location");
+  const workModeInput = document.getElementById("work_mode");
+  const limitInput = document.getElementById("limit");
   const submitBtn = document.getElementById("submit-btn");
+  const errorBox = document.getElementById("error-box");
+  const results = document.getElementById("results");
+  const requestSummary = document.getElementById("request-summary");
+  const searchSummary = document.getElementById("search-summary");
+  const jobIdsEl = document.getElementById("job-ids");
+  const jobsList = document.getElementById("jobs-list");
+  const jobsCount = document.getElementById("jobs-count");
+  const collectErrors = document.getElementById("collect-errors");
+  const rawJson = document.getElementById("raw-json");
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;");
+  }
+
+  function showError(message) {
+    results.hidden = true;
+    errorBox.hidden = false;
+    errorBox.textContent = message;
+  }
+
+  function clearError() {
+    errorBox.hidden = true;
+    errorBox.textContent = "";
+  }
+
+  function dlRow(label, value) {
+    return `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value ?? "—")}</dd></div>`;
+  }
+
+  function renderResults(data) {
+    clearError();
+    results.hidden = false;
+
+    const request = data.request || {};
+    requestSummary.innerHTML = [
+      dlRow("Title", request.title),
+      dlRow("Location", request.location || "(any)"),
+      dlRow("Work mode", request.work_mode || "any"),
+      dlRow("Limit", request.limit),
+      dlRow("ES DSL", JSON.stringify(request.es_dsl || {})),
+    ].join("");
+
+    const search = data.search || {};
+    const ids = search.job_ids || [];
+    searchSummary.innerHTML = [
+      dlRow("IDs returned", ids.length),
+      dlRow("Total results", search.total_results),
+      dlRow("Items per page", search.items_per_page),
+      dlRow("Credits remaining", search.credits_remaining),
+    ].join("");
+    jobIdsEl.textContent = JSON.stringify(ids, null, 2);
+
+    const jobs = data.jobs || [];
+    jobsCount.textContent = `(${data.jobs_count ?? jobs.length})`;
+    if (!jobs.length) {
+      jobsList.innerHTML = `<p class="muted">No job records collected.</p>`;
+    } else {
+      jobsList.innerHTML = jobs
+        .map((job) => {
+          const title = escapeHtml(job.title || "Untitled");
+          const company = escapeHtml(job.company_name || "Unknown company");
+          const location = escapeHtml(job.location || job.country || "—");
+          const url = String(job.url || job.external_url || "").trim();
+          const link = url
+            ? `<a class="download-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Open listing</a>`
+            : `<span class="muted">No URL</span>`;
+          const remote =
+            job.accepts_remote === true
+              ? "Remote OK"
+              : job.accepts_remote === false
+                ? "Onsite"
+                : "";
+          const meta = [job.employment_type, remote].filter(Boolean).map(escapeHtml).join(" · ");
+          return `
+            <article class="job-result-card">
+              <h3>${title}</h3>
+              <p class="job-meta">${company}</p>
+              <p class="muted">${location}${meta ? ` · ${meta}` : ""}</p>
+              <p class="job-id muted">ID: ${escapeHtml(job.id)}</p>
+              ${link}
+            </article>
+          `;
+        })
+        .join("");
+    }
+
+    const errors = data.collect_errors || [];
+    if (errors.length) {
+      collectErrors.hidden = false;
+      collectErrors.textContent = `Collect errors: ${errors.join(" | ")}`;
+    } else {
+      collectErrors.hidden = true;
+      collectErrors.textContent = "";
+    }
+
+    rawJson.textContent = JSON.stringify(data, null, 2);
+  }
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
 
-    const prompt = promptInput.value.trim();
-    if (!prompt) {
-      output.textContent = JSON.stringify({ error: "Prompt is required." }, null, 2);
+    const title = titleInput.value.trim();
+    if (!title) {
+      showError("Title is required.");
       return;
+    }
+
+    const payload = {
+      title,
+      location: locationInput.value.trim(),
+      work_mode: workModeInput.value.trim(),
+    };
+    const limitRaw = limitInput.value.trim();
+    if (limitRaw) {
+      const limit = Number(limitRaw);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+        showError("Limit must be an integer between 1 and 100.");
+        return;
+      }
+      payload.limit = limit;
     }
 
     submitBtn.disabled = true;
     submitBtn.textContent = "Running...";
-    output.textContent = "Waiting for response...";
+    clearError();
+    results.hidden = true;
 
     try {
-      const response = await fetch("/api/mcp/coresignal/jobs", {
+      const response = await fetch("/api/coresignal/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        output.textContent = JSON.stringify({ status: response.status, error: data }, null, 2);
-      } else {
-        output.textContent = JSON.stringify(data, null, 2);
+      let data;
+      try {
+        data = await response.json();
+      } catch (_parseError) {
+        showError(`Request failed with HTTP ${response.status} and a non-JSON body.`);
+        return;
       }
+
+      if (!response.ok) {
+        const detail =
+          typeof data?.detail === "string"
+            ? data.detail
+            : data?.detail
+              ? JSON.stringify(data.detail)
+              : JSON.stringify(data);
+        showError(`HTTP ${response.status}: ${detail}`);
+        return;
+      }
+
+      renderResults(data);
     } catch (error) {
-      output.textContent = JSON.stringify(
-        { error: "Request failed", details: String(error) },
-        null,
-        2,
-      );
+      showError(`Request failed: ${String(error)}`);
     } finally {
       submitBtn.disabled = false;
-      submitBtn.textContent = "Run Prompt";
+      submitBtn.textContent = "Run Search";
     }
   });
 </script>

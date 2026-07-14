@@ -213,6 +213,14 @@ td {
   word-break: break-word;
 }
 
+.search-history-table th:first-child,
+.search-history-table td:first-child {
+  width: 3.5rem;
+  min-width: 3.5rem;
+  white-space: nowrap;
+  word-break: normal;
+}
+
 .badge {
   display: inline-block;
   margin: 0 0.35rem 0.35rem 0;
@@ -349,6 +357,27 @@ td {
   margin-bottom: 1rem;
 }
 
+.mcp-test-form select {
+  width: 100%;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: #0b1220;
+  color: #e2e8f0;
+  padding: 0.62rem 0.72rem;
+  box-sizing: border-box;
+  margin-bottom: 0.85rem;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem;
+}
+
+.form-field {
+  min-width: 0;
+}
+
 .mcp-output-wrap {
   margin-top: 0.35rem;
 }
@@ -367,6 +396,109 @@ td {
   line-height: 1.35;
 }
 
+.api-error {
+  margin: 0.75rem 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid #7f1d1d;
+  border-radius: 8px;
+  background: rgba(127, 29, 29, 0.25);
+  color: #fecaca;
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+}
+
+.coresignal-results {
+  margin-top: 1rem;
+  display: grid;
+  gap: 1.1rem;
+}
+
+.result-section h2 {
+  margin: 0 0 0.55rem;
+  font-size: 1.02rem;
+}
+
+.result-summary {
+  margin: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.result-summary > div {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+}
+
+.result-summary dt {
+  margin: 0;
+  color: #94a3b8;
+}
+
+.result-summary dd {
+  margin: 0;
+  color: #e2e8f0;
+  word-break: break-word;
+}
+
+.result-ids-label {
+  margin: 0.7rem 0 0.35rem;
+}
+
+.job-ids-output {
+  max-height: 160px;
+}
+
+.jobs-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.job-result-card {
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  background: #020617;
+  padding: 0.8rem 0.9rem;
+}
+
+.job-result-card h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.98rem;
+}
+
+.job-meta {
+  margin: 0 0 0.2rem;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+}
+
+.job-id {
+  margin: 0.2rem 0 0.55rem;
+  font-size: 0.78rem;
+}
+
+.raw-json-details {
+  margin-top: 0.25rem;
+}
+
+.raw-json-details summary {
+  cursor: pointer;
+  color: #94a3b8;
+  margin-bottom: 0.45rem;
+}
+
+@media (max-width: 720px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .result-summary > div {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+}
+
 .mcp-json-preview {
   margin-top: 0.45rem;
   border: 1px solid #1e293b;
@@ -380,6 +512,11 @@ td {
   max-width: 520px;
   font-size: 0.76rem;
   line-height: 1.3;
+}
+
+.prompt-cell {
+  max-width: 22rem;
+  word-break: break-word;
 }
 
 @media (max-width: 720px) {

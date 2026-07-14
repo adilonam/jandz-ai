@@ -1,6 +1,5 @@
 """WhatsApp webhook routes."""
 
-import json
 import re
 from typing import Any, Dict, List, Optional
 
@@ -14,8 +13,8 @@ from src.config import settings
 from src.db import SessionLocal, get_db
 from src.models.whatsapp_user import WhatsAppUser
 from src.services.conversation_service import create_conversation_message
+from src.services.coresignal_service import search_jobs
 from src.services.job_search_history_service import create_job_search_history
-from src.services.mcp_chat_service import run_coresignal_jobs_prompt
 from src.services.openai_service import (
     extract_full_name_from_resume,
     extract_full_name_from_resume_pdf,
@@ -78,98 +77,174 @@ def _is_job_search_request(text: str) -> bool:
     return any(word in normalized for word in keywords)
 
 
+# Tokens that must not be treated as (or keep trailing after) a place name.
+_LOCATION_STOP_WORDS = frozenset(
+    {
+        "remote",
+        "remotely",
+        "onsite",
+        "on-site",
+        "hybrid",
+        "wfh",
+        "office",
+        "job",
+        "jobs",
+        "position",
+        "positions",
+        "role",
+        "roles",
+        "opening",
+        "openings",
+        "vacancy",
+        "vacancies",
+        "hiring",
+        "work",
+        "working",
+        "for",
+        "with",
+        "and",
+        "as",
+        "or",
+        "the",
+        "a",
+        "an",
+        "my",
+        "me",
+        "please",
+        "looking",
+        "want",
+        "need",
+        "get",
+        "give",
+        "find",
+        "search",
+        "seeking",
+        "python",
+        "java",
+        "javascript",
+        "typescript",
+        "golang",
+        "rust",
+        "kotlin",
+        "devops",
+        "frontend",
+        "backend",
+        "fullstack",
+        "full-stack",
+        "data",
+        "ai",
+        "ml",
+        "product",
+        "manager",
+        "engineer",
+        "engineering",
+        "developer",
+        "designer",
+        "scientist",
+        "analyst",
+        "nurse",
+        "teacher",
+        "senior",
+        "junior",
+        "lead",
+        "software",
+        "marketing",
+        "sales",
+        "intern",
+        "internship",
+    }
+)
+
+# Map place names / demonyms to CoreSignal country values and ISO-ish codes.
+_COUNTRY_ALIASES = {
+    "france": frozenset({"france", "fr", "fra", "french"}),
+    "germany": frozenset({"germany", "de", "deu", "deutschland", "german"}),
+    "morocco": frozenset({"morocco", "ma", "mar", "maroc", "moroccan"}),
+    "spain": frozenset({"spain", "es", "esp", "españa", "espana", "spanish"}),
+    "italy": frozenset({"italy", "it", "ita", "italia", "italian"}),
+    "portugal": frozenset({"portugal", "pt", "prt", "portuguese"}),
+    "netherlands": frozenset({"netherlands", "nl", "nld", "holland", "dutch"}),
+    "belgium": frozenset({"belgium", "be", "bel", "belgian"}),
+    "switzerland": frozenset({"switzerland", "ch", "che", "swiss"}),
+    "canada": frozenset({"canada", "ca", "can", "canadian"}),
+    "united kingdom": frozenset({"united kingdom", "uk", "gb", "gbr", "britain", "england"}),
+    "uk": frozenset({"united kingdom", "uk", "gb", "gbr", "britain", "england"}),
+    "united states": frozenset({"united states", "usa", "us", "america", "american"}),
+    "usa": frozenset({"united states", "usa", "us", "america", "american"}),
+    "us": frozenset({"united states", "usa", "us", "america", "american"}),
+}
+
+
+def _clean_location_candidate(raw: str) -> Optional[str]:
+    """Keep leading place tokens; drop work-mode / role / filler trailing words."""
+    if not raw:
+        return None
+
+    tokens = re.findall(r"[A-Za-z][A-Za-z\-']*", raw.strip(" .,!?:;"))
+    kept: List[str] = []
+    for token in tokens:
+        lower = token.lower()
+        if lower in _LOCATION_STOP_WORDS:
+            if kept:
+                break
+            continue
+        kept.append(token)
+
+    location = " ".join(kept).strip()
+    return location or None
+
+
 def _extract_location_from_text(text: str) -> Optional[str]:
     normalized = text.strip()
     if not normalized:
         return None
 
-    match = re.search(r"\b(?:in|at|near|from)\s+([A-Za-z][A-Za-z\s\-']{1,60})", normalized, re.IGNORECASE)
+    match = re.search(
+        r"\b(?:in|at|near|from)\s+([A-Za-z][A-Za-z\s\-']{1,60})",
+        normalized,
+        re.IGNORECASE,
+    )
     if not match:
         return None
 
-    location = match.group(1).strip(" .,!?:;")
-    location = re.split(r"\b(for|with|and|as)\b", location, flags=re.IGNORECASE)[0].strip()
-    return location or None
+    return _clean_location_candidate(match.group(1))
 
 
-def _format_jobs_from_mcp_output(raw_output: Any) -> str:
-    rows: Any = raw_output
-    if isinstance(raw_output, str):
-        text = raw_output.strip()
-        if not text:
-            return ""
-        try:
-            rows = json.loads(text)
-        except json.JSONDecodeError:
-            return text
-
-    if not isinstance(rows, list):
-        return ""
-
-    lines = ["Here are matching jobs:"]
-    shown = 0
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        title = str(row.get("title") or "Untitled role").strip()
-        company = str(row.get("company_name") or "Unknown company").strip()
-        location = str(row.get("location") or row.get("country") or "Unknown location").strip()
-        url = str(row.get("url") or row.get("external_url") or "").strip()
-
-        line = f"{shown + 1}. {title} - {company} - {location}"
-        if url:
-            line = f"{line} - {url}"
-        lines.append(line)
-        shown += 1
-        if shown >= settings.JOBS_TO_SHOW:
-            break
-
-    if shown == 0:
-        return ""
-    return "\n".join(lines)
-
-
-def _extract_jobs_from_payload(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
-    output = payload.get("output") or []
-    if not isinstance(output, list):
-        return []
-
-    for item in output:
-        if not isinstance(item, dict):
-            continue
-        if item.get("type") != "mcp_call":
-            continue
-        if str(item.get("name") or "").strip() != "coresignal_job_api":
-            continue
-
-        raw = item.get("output")
-        if isinstance(raw, str):
-            try:
-                parsed = json.loads(raw)
-                if isinstance(parsed, list):
-                    return [row for row in parsed if isinstance(row, dict)]
-            except json.JSONDecodeError:
-                return []
-        if isinstance(raw, list):
-            return [row for row in raw if isinstance(row, dict)]
-    return []
+def _resolve_location_text(text: str) -> Optional[str]:
+    """Prefer explicit 'in/at/near/from' phrases; otherwise clean free-text location."""
+    return _extract_location_from_text(text) or _clean_location_candidate(text.strip())
 
 
 def _infer_query_term(requested_text: str, skill_names: List[str]) -> str:
     lowered = requested_text.lower()
+    preferred_phrases = [
+        ("product manager", "Product Manager"),
+        ("project manager", "Project Manager"),
+        ("software engineer", "Software Engineer"),
+        ("data scientist", "Data Scientist"),
+        ("data engineer", "Data Engineer"),
+        ("machine learning", "Machine Learning"),
+        ("full stack", "Full Stack"),
+        ("fullstack", "Full Stack"),
+    ]
+    for phrase, label in preferred_phrases:
+        if phrase in lowered:
+            return label
+
     preferred_terms = [
         "python",
+        "javascript",
+        "typescript",
         "java",
         "golang",
-        "javascript",
-        "data",
         "devops",
         "nurse",
         "teacher",
         "designer",
+        "data",
     ]
     for term in preferred_terms:
-        if term in lowered:
+        if re.search(rf"\b{re.escape(term)}\b", lowered):
             return term.title()
 
     for skill_name in skill_names:
@@ -180,46 +255,30 @@ def _infer_query_term(requested_text: str, skill_names: List[str]) -> str:
     return "Software Engineer"
 
 
-def _build_safe_coresignal_tool_prompt(
-    query_term: str,
-    skills_text: str,
-    work_mode: str,
-    location: str,
-) -> str:
-    safe_term = query_term.replace('"', "").strip() or "Software Engineer"
-    return (
-        f"Candidate skills from CV: {skills_text}. "
-        f"Preferred work mode: {work_mode}. "
-        f"Preferred location/country: {location}. "
-        "First call the MCP tool coresignal_job_api with valid JSON arguments. "
-        "Do not use bool query. Use this exact shape for the job call: "
-        '{"query":{"match":{"title":"' + safe_term + '"}},'
-        '"keys":["id","title","description","location","company_name","url","country"],'
-        '"limit":20}. '
-        "After the job call, you may optionally use coresignal_company_multisource_api and/or "
-        "coresignal_employee_multisource_api to enrich and validate relevance before answering. "
-        "Only return jobs in the exact requested location/country. "
-        "Do not include jobs from other countries. "
-        "Keep the final response concise and focused on matching jobs."
-    )
-
-
 def _matches_work_mode(row: Dict[str, Any], work_mode: str) -> bool:
+    accepts_remote = row.get("accepts_remote")
     text_blob = " ".join(
         [
             str(row.get("title") or ""),
             str(row.get("description") or ""),
             str(row.get("location") or ""),
+            str(row.get("employment_type") or ""),
         ]
     ).lower()
 
     if work_mode == "remote":
-        # If not explicitly marked onsite/hybrid, keep it as potentially remote.
+        if accepts_remote is True:
+            return True
+        if accepts_remote is False:
+            return False
+        # Flag missing: keep unless clearly onsite-only (API may already have filtered).
         if "onsite" in text_blob or "on-site" in text_blob:
             return False
         return True
 
     if work_mode == "onsite":
+        if accepts_remote is True and "onsite" not in text_blob and "on-site" not in text_blob:
+            return False
         if "remote" in text_blob and "onsite" not in text_blob and "on-site" not in text_blob:
             return False
         return True
@@ -227,15 +286,40 @@ def _matches_work_mode(row: Dict[str, Any], work_mode: str) -> bool:
     return True
 
 
+def _place_match_tokens(location: str) -> List[str]:
+    cleaned = _clean_location_candidate(location) or location.strip()
+    return [token.lower() for token in re.findall(r"[A-Za-z][A-Za-z\-']*", cleaned)]
+
+
 def _matches_requested_country(row: Dict[str, Any], location: str) -> bool:
-    requested = location.strip().lower()
-    if not requested:
+    tokens = _place_match_tokens(location)
+    if not tokens:
         return True
 
     row_location = str(row.get("location") or "").lower()
     row_country = str(row.get("country") or "").lower()
-    haystack = f"{row_location} {row_country}".strip()
-    return requested in haystack
+    row_city = str(row.get("city") or "").lower()
+    haystack = f"{row_location} {row_country} {row_city}".strip()
+    requested_phrase = " ".join(tokens)
+
+    if requested_phrase and requested_phrase in haystack:
+        return True
+
+    alias_keys = [requested_phrase, *tokens]
+    for key in alias_keys:
+        aliases = _COUNTRY_ALIASES.get(key)
+        if not aliases:
+            continue
+        if row_country in aliases:
+            return True
+        if any(alias in haystack for alias in aliases if len(alias) >= 2):
+            return True
+
+    for token in tokens:
+        if len(token) >= 2 and token in haystack:
+            return True
+
+    return False
 
 
 def _format_filtered_jobs_reply(
@@ -245,12 +329,21 @@ def _format_filtered_jobs_reply(
     limit: Optional[int] = None,
 ) -> str:
     max_jobs = limit if limit is not None else settings.JOBS_TO_SHOW
-    location_lower = location.lower().strip()
+    display_location = _clean_location_candidate(location) or location.strip()
+    location_lower = display_location.lower().strip()
 
     def score(row: Dict[str, Any]) -> int:
-        row_location = str(row.get("location") or row.get("country") or "").lower()
+        row_location = " ".join(
+            [
+                str(row.get("location") or ""),
+                str(row.get("country") or ""),
+                str(row.get("city") or ""),
+            ]
+        ).lower()
         score_value = 0
-        if location_lower and location_lower in row_location:
+        if location_lower and (
+            location_lower in row_location or _matches_requested_country(row, display_location)
+        ):
             score_value += 3
         if _matches_work_mode(row, work_mode):
             score_value += 1
@@ -259,7 +352,7 @@ def _format_filtered_jobs_reply(
     sorted_rows = sorted(jobs, key=score, reverse=True)
     picked: List[Dict[str, Any]] = []
     for row in sorted_rows:
-        if not _matches_requested_country(row, location):
+        if not _matches_requested_country(row, display_location):
             continue
         if not _matches_work_mode(row, work_mode):
             continue
@@ -269,7 +362,7 @@ def _format_filtered_jobs_reply(
 
     if not picked:
         return (
-            f"I could not find matching {work_mode} jobs in {location} right now. "
+            f"I could not find matching {work_mode} jobs in {display_location} right now. "
             "Please try a nearby city/country or another role keyword."
         )
 
@@ -286,53 +379,6 @@ def _format_filtered_jobs_reply(
         lines.append(line)
 
     return "\n".join(lines)
-
-
-def _extract_output_text(payload: Dict[str, Any]) -> str:
-    output_text = str(payload.get("output_text") or "").strip()
-    if output_text:
-        return output_text
-
-    output = payload.get("output") or []
-    if isinstance(output, list):
-        # Prefer assistant text output when available.
-        for item in output:
-            if not isinstance(item, dict):
-                continue
-            content_items = item.get("content") or []
-            if not isinstance(content_items, list):
-                continue
-            for content in content_items:
-                if not isinstance(content, dict):
-                    continue
-                text = str(content.get("text") or "").strip()
-                if text:
-                    return text
-
-        # Fallback to raw MCP tool output from coresignal_job_api calls.
-        for item in output:
-            if not isinstance(item, dict):
-                continue
-            if item.get("type") != "mcp_call":
-                continue
-            if str(item.get("name") or "").strip() != "coresignal_job_api":
-                continue
-
-            formatted = _format_jobs_from_mcp_output(item.get("output"))
-            if formatted:
-                return formatted
-    return ""
-
-
-def _build_coresignal_prompt(skills_text: str, work_mode: str, location: str) -> str:
-    return (
-        "Use CoreSignal MCP tools to find active job openings matching this candidate profile. "
-        "Return 5 concise results as bullet points, each with: title, company, location, "
-        "work mode, and application/source link. If fewer than 5, return what is available.\n\n"
-        f"Candidate skills: {skills_text}\n"
-        f"Preferred work mode: {work_mode}\n"
-        f"Target job location: {location}"
-    )
 
 
 def _append_job_search_cta(reply_text: str) -> str:
@@ -358,13 +404,13 @@ async def _send_and_log_text(
     user_id: int,
     body: str,
 ) -> None:
-    await send_whatsapp_text(phone_number_id, from_id, body)
+    sent_body = await send_whatsapp_text(phone_number_id, from_id, body)
     async with SessionLocal() as session:
         await create_conversation_message(
             session,
             user_id=user_id,
             direction="assistant",
-            text=body,
+            text=sent_body,
             channel="whatsapp",
         )
 
@@ -403,35 +449,37 @@ async def _search_jobs_reply_for_user(
         return "I could not find your profile. Please send your CV PDF again."
 
     skill_names = [skill.name for skill in user.skills]
-    skills_text = ", ".join(skill_names) if skill_names else "general profile"
     query_term = _infer_query_term(requested_text, skill_names)
-    prompt = _build_safe_coresignal_tool_prompt(
-        query_term=query_term,
-        skills_text=skills_text,
-        work_mode=work_mode,
-        location=location,
+    clean_location = _clean_location_candidate(location) or location.strip()
+    prompt_query = (
+        f"title={query_term}; location={clean_location}; work_mode={work_mode}; "
+        f"skills={', '.join(skill_names) if skill_names else 'general profile'}"
     )
     try:
-        payload = await run_coresignal_jobs_prompt(prompt)
+        result = await search_jobs(
+            title=query_term,
+            location=clean_location,
+            work_mode=work_mode,
+            limit=max(20, settings.JOBS_TO_SHOW),
+        )
         await create_job_search_history(
             db,
-            prompt_query=prompt,
-            response_payload=payload,
-            provider="coresignal_mcp",
+            prompt_query=prompt_query,
+            response_payload=result["history_payload"],
+            provider="coresignal_api",
         )
-        jobs = _extract_jobs_from_payload(payload)
-        if jobs:
-            return _format_filtered_jobs_reply(
-                jobs,
-                location=location,
-                work_mode=work_mode,
-                limit=settings.JOBS_TO_SHOW,
+        jobs = result.get("jobs") or []
+        if not jobs:
+            return (
+                f"I could not find matching {work_mode} jobs in {clean_location} right now. "
+                "Please try a nearby city/country or another role keyword."
             )
-
-        jobs_reply = _extract_output_text(payload)
-        if jobs_reply:
-            return jobs_reply
-        return "I could not parse job listings right now. Please try again in a few minutes."
+        return _format_filtered_jobs_reply(
+            jobs,
+            location=clean_location,
+            work_mode=work_mode,
+            limit=settings.JOBS_TO_SHOW,
+        )
     except (ValueError, RuntimeError) as exc:
         print(f"CoreSignal search failed: {exc}")
         return "I could not search jobs right now. Please try again in a moment."
@@ -601,8 +649,12 @@ async def whatsapp_webhook(
         if _is_job_search_request(incoming_text):
             requested_work_mode = _normalize_work_mode(incoming_text) or user.preferred_work_mode
             requested_location = (
-                _extract_location_from_text(incoming_text) or user.preferred_job_location
+                _resolve_location_text(incoming_text) or user.preferred_job_location
             )
+            if requested_location:
+                requested_location = (
+                    _clean_location_candidate(requested_location) or requested_location
+                )
 
             if requested_work_mode and requested_location:
                 await update_user_job_search_preferences(
@@ -707,7 +759,7 @@ async def whatsapp_webhook(
             continue
 
         if user.job_search_stage == JOB_STAGE_AWAITING_LOCATION:
-            location = message.text.strip()
+            location = _resolve_location_text(message.text) or message.text.strip()
             if len(location) < 2:
                 background_tasks.add_task(
                     _send_and_log_text,

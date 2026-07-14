@@ -13,17 +13,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.db import get_db
-from src.schemas import EchoRequest, McpPromptRequest
+from src.schemas import CoresignalJobsSearchRequest, EchoRequest
 from src.services.conversation_service import (
     list_conversation_user_summaries,
     list_messages_for_user,
 )
+from src.services.coresignal_service import search_jobs
 from src.services.job_search_history_service import (
     count_job_search_history,
     create_job_search_history,
     list_job_search_history,
 )
-from src.services.mcp_chat_service import run_coresignal_jobs_prompt
 from src.services.skill_service import list_skills
 from src.services.user_service import (
     delete_whatsapp_user_by_id,
@@ -210,8 +210,9 @@ async def conversation_detail_page(
     )
 
 
+@router.get("/coresignal")
 @router.get("/mcp/coresignal")
-async def mcp_coresignal_test_page(request: Request):
+async def coresignal_test_page(request: Request):
     _require_auth(request)
     return templates.TemplateResponse(
         request=request,
@@ -241,22 +242,32 @@ async def mcp_search_history_page(request: Request, db: AsyncSession = Depends(g
     )
 
 
+@router.post("/api/coresignal/jobs")
 @router.post("/api/mcp/coresignal/jobs")
-async def mcp_coresignal_jobs_api(
+async def coresignal_jobs_api(
     request: Request,
-    body: McpPromptRequest,
+    body: CoresignalJobsSearchRequest,
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     _require_auth(request)
     try:
-        payload = await run_coresignal_jobs_prompt(body.prompt)
+        result = await search_jobs(
+            title=body.title,
+            location=body.location,
+            work_mode=body.work_mode,
+            limit=body.limit,
+        )
+        prompt_query = (
+            f"title={body.title}; location={body.location}; "
+            f"work_mode={body.work_mode}; limit={body.limit}"
+        )
         await create_job_search_history(
             db,
-            prompt_query=body.prompt,
-            response_payload=payload,
-            provider="coresignal_mcp",
+            prompt_query=prompt_query,
+            response_payload=result["history_payload"],
+            provider="coresignal_api",
         )
-        return payload
+        return result["history_payload"]
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except RuntimeError as exc:

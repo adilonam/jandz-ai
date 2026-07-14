@@ -5,7 +5,7 @@ from typing import Any, List, Optional
 
 import httpx
 
-from src.config import settings
+from src.config import format_outbound_message, settings
 
 
 @dataclass
@@ -91,12 +91,15 @@ async def download_whatsapp_media(media_id: str) -> Optional[bytes]:
         return None
 
 
-async def send_whatsapp_text(phone_number_id: str, to_wa_id: str, body: str) -> None:
-    """Send a text message through WhatsApp Cloud API."""
-    
+async def send_whatsapp_text(phone_number_id: str, to_wa_id: str, body: str) -> str:
+    """Send a text message through WhatsApp Cloud API.
+
+    Returns the body that was sent (including any ``[dev]`` prefix).
+    """
+    body = format_outbound_message(body)
     if not settings.WHATSAPP_ACCESS_TOKEN:
         print("WHATSAPP_ACCESS_TOKEN is not set; skipping outbound reply")
-        return
+        return body
     url = f"https://graph.facebook.com/{settings.WHATSAPP_GRAPH_API_VERSION}/{phone_number_id}/messages"
     headers = {
         "Authorization": f"Bearer {settings.WHATSAPP_ACCESS_TOKEN}",
@@ -113,3 +116,4 @@ async def send_whatsapp_text(phone_number_id: str, to_wa_id: str, body: str) -> 
         response = await client.post(url, headers=headers, json=payload)
         if response.status_code >= 400:
             print(f"WhatsApp API error {response.status_code}: {response.text}")
+    return body

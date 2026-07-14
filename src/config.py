@@ -1,12 +1,20 @@
 """Application configuration."""
 
 import os
-from typing import Dict
+from typing import Dict, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def _normalize_env(value: Optional[str]) -> str:
+    """Return ``dev`` or ``prod``; unknown/empty values default to ``dev``."""
+    normalized = (value or "").strip().lower()
+    if normalized in {"dev", "prod"}:
+        return normalized
+    return "dev"
 
 
 class Settings:
@@ -15,6 +23,8 @@ class Settings:
     APP_NAME = os.getenv("APP_NAME", "jandz-ai").strip() or "jandz-ai"
     APP_VERSION = "0.1.0"
     APP_DESCRIPTION = "WhatsApp + Telegram + OpenAI FastAPI service."
+
+    ENV = _normalize_env(os.getenv("ENV", "dev"))
 
     WHATSAPP_VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "").strip()
     WHATSAPP_ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN", "").strip()
@@ -84,3 +94,12 @@ class Settings:
 
 
 settings = Settings()
+
+
+def format_outbound_message(body: str) -> str:
+    """Prefix outbound bot text with ``[dev]`` when ``ENV`` is ``dev``."""
+    if settings.ENV != "dev":
+        return body
+    if body.startswith("[dev]"):
+        return body
+    return f"[dev] {body}"

@@ -5,7 +5,7 @@ from typing import Any, List, Optional
 
 import httpx
 
-from src.config import settings
+from src.config import format_outbound_message, settings
 
 
 @dataclass
@@ -80,11 +80,15 @@ async def download_telegram_file(file_id: str) -> Optional[bytes]:
         return None
 
 
-async def send_telegram_text(chat_id: int, body: str) -> None:
-    """Send a text message through the Telegram Bot API."""
+async def send_telegram_text(chat_id: int, body: str) -> str:
+    """Send a text message through the Telegram Bot API.
+
+    Returns the body that was sent (including any ``[dev]`` prefix).
+    """
+    body = format_outbound_message(body)
     if not settings.TELEGRAM_BOT_TOKEN:
         print("TELEGRAM_BOT_TOKEN is not set; skipping outbound reply")
-        return
+        return body
 
     payload = {
         "chat_id": chat_id,
@@ -95,3 +99,4 @@ async def send_telegram_text(chat_id: int, body: str) -> None:
         response = await client.post(_telegram_api_url("sendMessage"), json=payload)
         if response.status_code >= 400:
             print(f"Telegram API error {response.status_code}: {response.text}")
+    return body
