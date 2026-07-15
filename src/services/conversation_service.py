@@ -6,8 +6,8 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.models.chat_user import ChatUser
 from src.models.conversation_message import ConversationMessage
-from src.models.whatsapp_user import WhatsAppUser
 
 
 async def create_conversation_message(
@@ -15,7 +15,7 @@ async def create_conversation_message(
     user_id: int,
     direction: str,
     text: str,
-    channel: str = "whatsapp",
+    channel: str = "telegram",
 ) -> ConversationMessage:
     """Persist one message row."""
     message = ConversationMessage(
@@ -49,14 +49,14 @@ async def list_conversation_user_summaries(session: AsyncSession) -> List[dict]:
     """Return one row per user with message count and last message time."""
     stmt = (
         select(
-            WhatsAppUser.id,
-            WhatsAppUser.phone_number,
-            WhatsAppUser.display_name,
+            ChatUser.id,
+            ChatUser.phone_number,
+            ChatUser.display_name,
             func.count(ConversationMessage.id).label("messages_count"),
             func.max(ConversationMessage.created_at).label("last_message_at"),
         )
-        .join(ConversationMessage, ConversationMessage.user_id == WhatsAppUser.id)
-        .group_by(WhatsAppUser.id, WhatsAppUser.phone_number, WhatsAppUser.display_name)
+        .join(ConversationMessage, ConversationMessage.user_id == ChatUser.id)
+        .group_by(ChatUser.id, ChatUser.phone_number, ChatUser.display_name)
         .order_by(desc(func.max(ConversationMessage.created_at)))
     )
     result = await session.execute(stmt)

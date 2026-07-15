@@ -8,14 +8,14 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.db import Base
 
 if TYPE_CHECKING:
-    from src.models.whatsapp_user import WhatsAppUser
+    from src.models.chat_user import ChatUser
 
-whatsapp_user_skills = Table(
-    "whatsapp_user_skills",
+chat_user_skills = Table(
+    "chat_user_skills",
     Base.metadata,
-    Column("user_id", ForeignKey("whatsapp_users.id", ondelete="CASCADE"), primary_key=True),
+    Column("user_id", ForeignKey("chat_users.id", ondelete="CASCADE"), primary_key=True),
     Column("skill_id", ForeignKey("skills.id", ondelete="CASCADE"), primary_key=True),
-    UniqueConstraint("user_id", "skill_id", name="uq_whatsapp_user_skill"),
+    UniqueConstraint("user_id", "skill_id", name="uq_chat_user_skill"),
 )
 
 
@@ -27,8 +27,8 @@ class Skill(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     category: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(120), unique=True, index=True, nullable=False)
-    users: Mapped[List["WhatsAppUser"]] = relationship(
-        secondary=whatsapp_user_skills,
+    users: Mapped[List["ChatUser"]] = relationship(
+        secondary=chat_user_skills,
         back_populates="skills",
         lazy="selectin",
     )
