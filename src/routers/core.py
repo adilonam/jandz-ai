@@ -26,9 +26,9 @@ from src.services.job_search_history_service import (
 )
 from src.services.skill_service import list_skills
 from src.services.user_service import (
-    delete_whatsapp_user_by_id,
-    get_whatsapp_user_by_id,
-    list_whatsapp_users,
+    delete_chat_user_by_id,
+    get_chat_user_by_id,
+    list_chat_users,
 )
 
 router = APIRouter(tags=["core"])
@@ -86,7 +86,7 @@ async def root(request: Request, db: AsyncSession = Depends(get_db)):
             context={"error": error},
         )
 
-    users = await list_whatsapp_users(db)
+    users = await list_chat_users(db)
     skills = await list_skills(db)
     mcp_search_history_count = await count_job_search_history(db)
     users_with_resume = sum(1 for user in users if user.resume_pdf)
@@ -106,7 +106,7 @@ async def root(request: Request, db: AsyncSession = Depends(get_db)):
 async def users_page(request: Request, db: AsyncSession = Depends(get_db)):
     _require_auth(request)
 
-    users = await list_whatsapp_users(db)
+    users = await list_chat_users(db)
     user_rows = [
         {
             "id": user.id,
@@ -185,7 +185,7 @@ async def conversation_detail_page(
 ):
     _require_auth(request)
 
-    user = await get_whatsapp_user_by_id(db, user_id)
+    user = await get_chat_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
@@ -310,7 +310,7 @@ async def download_resume(
 ) -> Response:
     _require_auth(request)
 
-    user = await get_whatsapp_user_by_id(db, user_id)
+    user = await get_chat_user_by_id(db, user_id)
     if not user or not user.resume_pdf:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found")
 
@@ -327,7 +327,7 @@ async def delete_user(
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
     _require_auth(request)
-    await delete_whatsapp_user_by_id(db, user_id)
+    await delete_chat_user_by_id(db, user_id)
     return RedirectResponse("/users", status_code=status.HTTP_303_SEE_OTHER)
 
 

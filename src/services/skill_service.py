@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.models.skill import Skill
-from src.models.whatsapp_user import WhatsAppUser
+from src.models.chat_user import ChatUser
 
 
 async def list_skills(session: AsyncSession) -> List[Skill]:
@@ -22,7 +22,7 @@ async def list_skills(session: AsyncSession) -> List[Skill]:
 
 async def set_user_skills_by_names(
     session: AsyncSession,
-    user: WhatsAppUser,
+    user: ChatUser,
     skill_names: Sequence[str],
 ) -> List[Skill]:
     """Replace user skills with canonical entries matching provided names."""

@@ -22,14 +22,9 @@ class Settings:
 
     APP_NAME = os.getenv("APP_NAME", "jandz-ai").strip() or "jandz-ai"
     APP_VERSION = "0.1.0"
-    APP_DESCRIPTION = "WhatsApp + Telegram + OpenAI FastAPI service."
+    APP_DESCRIPTION = "Telegram + OpenAI FastAPI service."
 
     ENV = _normalize_env(os.getenv("ENV", "dev"))
-
-    WHATSAPP_VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "").strip()
-    WHATSAPP_ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN", "").strip()
-    WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "").strip()
-    WHATSAPP_GRAPH_API_VERSION = os.getenv("WHATSAPP_GRAPH_API_VERSION", "v21.0").strip() or "v21.0"
 
     TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip()
@@ -43,8 +38,9 @@ class Settings:
     )
     JOBS_TO_SHOW = max(1, int((os.getenv("JOBS_TO_SHOW", "5") or "5").strip()))
     OPENAI_SYSTEM_PROMPT = (
-        "You are a helpful assistant chatting with users on WhatsApp. "
-        "Keep answers concise and clear."
+        "You are a friendly guide on Telegram helping students and people find "
+        "education or job opportunities. Keep answers concise and clear. "
+        "When relevant, invite them to reply with education or jobs for tailored suggestions."
     )
 
     ADMIN_LOGIN = os.getenv("ADMIN_LOGIN", "").strip()

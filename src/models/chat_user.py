@@ -1,4 +1,4 @@
-"""WhatsApp user model."""
+"""Chat user model (Telegram and other messaging channels)."""
 
 from datetime import datetime
 from typing import List, Optional, TYPE_CHECKING
@@ -7,17 +7,17 @@ from sqlalchemy import DateTime, LargeBinary, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.db import Base
-from src.models.skill import whatsapp_user_skills
+from src.models.skill import chat_user_skills
 
 if TYPE_CHECKING:
     from src.models.conversation_message import ConversationMessage
     from src.models.skill import Skill
 
 
-class WhatsAppUser(Base):
-    """User identified by WhatsApp phone number."""
+class ChatUser(Base):
+    """User identified by an external channel key (e.g. Telegram chat id)."""
 
-    __tablename__ = "whatsapp_users"
+    __tablename__ = "chat_users"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     phone_number: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
@@ -27,7 +27,7 @@ class WhatsAppUser(Base):
     preferred_work_mode: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     preferred_job_location: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     skills: Mapped[List["Skill"]] = relationship(
-        secondary=whatsapp_user_skills,
+        secondary=chat_user_skills,
         back_populates="users",
         lazy="selectin",
     )

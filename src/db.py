@@ -79,28 +79,70 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 
+async def _rename_legacy_whatsapp_tables(conn) -> None:
+    """Rename legacy WhatsApp-era tables if present (idempotent)."""
+    await conn.execute(
+        text(
+            """
+            DO $$
+            BEGIN
+              IF EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_name = 'whatsapp_users'
+              ) AND NOT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_name = 'chat_users'
+              ) THEN
+                ALTER TABLE whatsapp_users RENAME TO chat_users;
+              END IF;
+
+              IF EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_name = 'whatsapp_user_skills'
+              ) AND NOT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_name = 'chat_user_skills'
+              ) THEN
+                ALTER TABLE whatsapp_user_skills RENAME TO chat_user_skills;
+              END IF;
+
+              IF EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = 'uq_whatsapp_user_skill'
+              ) AND NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = 'uq_chat_user_skill'
+              ) THEN
+                ALTER TABLE chat_user_skills
+                  RENAME CONSTRAINT uq_whatsapp_user_skill TO uq_chat_user_skill;
+              END IF;
+            END $$;
+            """
+        )
+    )
+
+
 async def init_db() -> None:
     """Create DB tables for first-run/dev environments."""
+    from src.models.chat_user import ChatUser  # noqa: F401
     from src.models.conversation_message import ConversationMessage  # noqa: F401
     from src.models.job_search_history import JobSearchHistory  # noqa: F401
-    from src.models.whatsapp_user import WhatsAppUser  # noqa: F401
     from src.models.skill import Skill  # noqa: F401
 
     async with engine.begin() as conn:
+        await _rename_legacy_whatsapp_tables(conn)
         await conn.run_sync(Base.metadata.create_all)
         # Keep existing dev DBs compatible when new columns are added.
         await conn.execute(
-            text("ALTER TABLE whatsapp_users ADD COLUMN IF NOT EXISTS resume_pdf BYTEA")
+            text("ALTER TABLE chat_users ADD COLUMN IF NOT EXISTS resume_pdf BYTEA")
         )
         await conn.execute(
-            text("ALTER TABLE whatsapp_users ADD COLUMN IF NOT EXISTS job_search_stage VARCHAR(32)")
+            text("ALTER TABLE chat_users ADD COLUMN IF NOT EXISTS job_search_stage VARCHAR(32)")
         )
         await conn.execute(
-            text("ALTER TABLE whatsapp_users ADD COLUMN IF NOT EXISTS preferred_work_mode VARCHAR(16)")
+            text("ALTER TABLE chat_users ADD COLUMN IF NOT EXISTS preferred_work_mode VARCHAR(16)")
         )
         await conn.execute(
             text(
-                "ALTER TABLE whatsapp_users ADD COLUMN IF NOT EXISTS preferred_job_location VARCHAR(120)"
+                "ALTER TABLE chat_users ADD COLUMN IF NOT EXISTS preferred_job_location VARCHAR(120)"
             )
         )
         await conn.execute(

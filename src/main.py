@@ -9,7 +9,6 @@ from src.config import settings
 from src.db import init_db
 from src.routers.core import router as core_router
 from src.routers.telegram import router as telegram_router
-from src.routers.whatsapp import router as whatsapp_router
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -23,7 +22,6 @@ app.mount(
 )
 
 app.include_router(core_router)
-app.include_router(whatsapp_router)
 app.include_router(telegram_router)
 
 

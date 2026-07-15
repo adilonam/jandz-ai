@@ -8,10 +8,11 @@ from typing import List, Optional, Sequence
 import httpx
 
 from src.config import settings
+from src.prompts import build_opportunity_prompts
 
 
 async def generate_openai_reply(user_text: str) -> str:
-    """Generate a WhatsApp response from OpenAI."""
+    """Generate a Telegram response from OpenAI."""
     if not settings.OPENAI_API_KEY:
         return "I am not configured yet. Please set OPENAI_API_KEY."
 
@@ -49,6 +50,68 @@ async def generate_openai_reply(user_text: str) -> str:
 
     text = str(content).strip()
     return text or "Sorry, I could not generate a response right now."
+
+
+async def generate_opportunities_reply(
+    opportunity_type: str,
+    skill_names: Sequence[str],
+    limit: Optional[int] = None,
+    request_text: Optional[str] = None,
+    location: Optional[str] = None,
+) -> str:
+    """Suggest education or job opportunities tailored to the user's skills via OpenAI."""
+    max_items = limit if limit is not None else settings.JOBS_TO_SHOW
+    kind = "education" if opportunity_type == "education" else "job"
+    skills_label = ", ".join(name.strip() for name in skill_names if name.strip()) or (
+        "general profile (skills not extracted yet)"
+    )
+
+    if not settings.OPENAI_API_KEY:
+        return (
+            f"I am not configured yet to list {kind} opportunities. "
+            "Please set OPENAI_API_KEY."
+        )
+
+    prompts = build_opportunity_prompts(
+        opportunity_type,
+        skills_label=skills_label,
+        max_items=max_items,
+        user_request=request_text,
+        location=location,
+    )
+
+    payload = {
+        "model": settings.OPENAI_MODEL,
+        "messages": [
+            {"role": "system", "content": prompts.system},
+            {"role": "user", "content": prompts.user},
+        ],
+        "temperature": 0.4,
+    }
+    headers = {
+        "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                json=payload,
+                headers=headers,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        content = str(data["choices"][0]["message"]["content"]).strip()
+        if content:
+            return content
+    except Exception as exc:
+        print(f"OpenAI opportunity listing failed: {exc}")
+
+    return (
+        f"I could not list {kind} opportunities right now. "
+        "Please try again in a moment, or reply with education or jobs."
+    )
 
 
 async def extract_skills_from_resume(
