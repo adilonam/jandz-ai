@@ -21,14 +21,19 @@ def _json_shape_instructions(max_items: int) -> str:
         '      "contact_name": "optional",\n'
         '      "contact_email": "optional",\n'
         '      "contact_phone": "optional",\n'
-        '      "source_url": "careers site when confident",\n'
-        '      "apply_url": "job posting or search URL",\n'
+        '      "source_url": "careers site when confident (not a LinkedIn /jobs/view/ link)",\n'
+        '      "apply_url": "LinkedIn jobs search URL (keywords + location)",\n'
         '      "tips": ["optional tip 1", "optional tip 2"]\n'
         "    }\n"
         "  ]\n"
         "}\n"
-        "Omit unknown optional fields or use null. Do not invent broken URLs; "
-        "if unsure of apply_url, use a useful LinkedIn/Google search URL."
+        "Omit unknown optional fields or use null. "
+        "For apply_url ALWAYS use a LinkedIn jobs SEARCH URL shaped like "
+        "https://www.linkedin.com/jobs/search/?keywords=ROLE+SKILLS&location=PLACE "
+        "(URL-encode spaces). Build keywords from the role/title plus relevant user skills; "
+        "use the preferred location (or the opportunity location). "
+        "NEVER use direct LinkedIn job posting links (linkedin.com/jobs/view/...). "
+        "Those postings often close; search links stay useful."
     )
 
 
@@ -36,8 +41,10 @@ def build_jobs_system_prompt(*, max_items: int) -> str:
     """System instructions for listing job opportunities."""
     return (
         "You guide people seeking work toward job opportunities. "
-        "Suggest realistic roles and example openings matched to their skills "
+        "Suggest realistic roles matched to their skills "
         "(title, typical employer type or company example, and a short fit reason). "
+        "Do not point applicants at specific LinkedIn job posting IDs; "
+        "always give LinkedIn jobs search links instead. "
         + _json_shape_instructions(max_items)
     )
 
@@ -62,5 +69,7 @@ def build_jobs_user_prompt(
         f"User request: {request}\n"
         f"{location_line}\n"
         f"Suggest {max_items} job opportunities tailored to these skills. "
+        "Set each apply_url to a LinkedIn jobs search link using role keywords "
+        "and the preferred location — never a linkedin.com/jobs/view/ URL. "
         "Fill optional fields when you know them. Return JSON only."
     )
