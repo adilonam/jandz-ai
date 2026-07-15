@@ -28,6 +28,7 @@ class Settings:
 
     TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip()
+    PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
 
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
     OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
@@ -36,7 +37,6 @@ class Settings:
         os.getenv("OPENAI_AUDIO_MODEL", "gpt-4o-mini-transcribe").strip()
         or "gpt-4o-mini-transcribe"
     )
-    JOBS_TO_SHOW = max(1, int((os.getenv("JOBS_TO_SHOW", "5") or "5").strip()))
     OPENAI_SYSTEM_PROMPT = (
         "You are a friendly guide on Telegram helping students and people find "
         "education or job opportunities. Keep answers concise and clear. "
@@ -48,6 +48,11 @@ class Settings:
     ADMIN_SESSION_SECRET = os.getenv("ADMIN_SESSION_SECRET", "").strip()
 
     DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+
+    @property
+    def public_base_url(self) -> str:
+        """Public origin for ``/opportunities/{id}`` Telegram links (no trailing slash)."""
+        return self.PUBLIC_BASE_URL
 
     @property
     def ASYNC_DATABASE_URL(self) -> str:

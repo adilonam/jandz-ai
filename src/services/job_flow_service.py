@@ -7,8 +7,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.config import settings
 from src.models.chat_user import ChatUser
-from src.services.openai_service import generate_opportunities_reply
+from src.services.openai_service import generate_opportunities
+from src.services.opportunity_service import (
+    create_opportunities_from_payloads,
+    format_telegram_opportunity_list,
+)
 
 OPPORTUNITY_STAGE_AWAITING_TYPE = "awaiting_opportunity_type"
 # Legacy stages from the previous remote/onsite/location flow.
@@ -234,6 +239,7 @@ async def opportunities_reply_for_user(
     user_id: int,
     opportunity_type: str,
     request_text: Optional[str] = None,
+    base_url: Optional[str] = None,
 ) -> str:
     """Generate education or job opportunity suggestions from the user's stored skills."""
     user = await db.scalar(
@@ -246,9 +252,52 @@ async def opportunities_reply_for_user(
 
     skill_names: List[str] = [skill.name for skill in user.skills]
     location = extract_location_hint(request_text or "")
-    return await generate_opportunities_reply(
+    result = await generate_opportunities(
         opportunity_type=opportunity_type,
         skill_names=skill_names,
         request_text=request_text,
         location=location,
     )
+
+    if not result.opportunities:
+        return result.fallback_text or (
+            "I could not list opportunities right now. Please try again."
+        )
+
+    try:
+        rows = await create_opportunities_from_payloads(
+            db,
+            result.opportunities,
+            opportunity_type=opportunity_type,
+            chat_user_id=user.id,
+        )
+    except Exception as exc:
+        print(f"Failed to persist opportunities: {exc}")
+        return (
+            result.fallback_text
+            or "I found some opportunities but could not save them. Please try again."
+        )
+
+    if not rows:
+        return (
+            result.fallback_text
+            or "I could not list opportunities right now. Please try again."
+        )
+
+    public_base = (base_url or settings.public_base_url or "").rstrip("/")
+    if public_base:
+        return format_telegram_opportunity_list(
+            rows,
+            base_url=public_base,
+            opportunity_type=opportunity_type,
+        )
+
+    # No PUBLIC_BASE_URL configured — still return local paths so links are identifiable.
+    lines = ["Here are some opportunities matched to your profile:", ""]
+    for index, opportunity in enumerate(rows, start=1):
+        title = (opportunity.title or f"Opportunity {index}").strip()
+        lines.append(f"{index}. {title}")
+        lines.append(f"/opportunities/{opportunity.id}")
+        lines.append("")
+    return "\n".join(lines).rstrip()
+

@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}{{ opportunity.title or "Opportunity" }} · Jandz AI{% endblock %}
+{% block body_class %}opportunity-page{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="/static/css/opportunity.css" />
+
+<main class="opportunity-shell">
+  <article class="opportunity-card">
+    <header class="opportunity-header">
+      <div class="opportunity-meta">
+        {% if opportunity.category %}
+        <span class="opportunity-tag">{{ opportunity.category }}</span>
+        {% elif opportunity.type %}
+        <span class="opportunity-tag">{{ opportunity.type | upper }}</span>
+        {% endif %}
+        {% if opportunity.location %}
+        <span class="opportunity-location">{{ opportunity.location }}</span>
+        {% endif %}
+      </div>
+
+      {% if opportunity.title %}
+      <h1 class="opportunity-title">{{ opportunity.title }}</h1>
+      {% endif %}
+      {% if opportunity.organization %}
+      <p class="opportunity-org">{{ opportunity.organization }}</p>
+      {% endif %}
+    </header>
+
+    {% if opportunity.description %}
+    <p class="opportunity-description">{{ opportunity.description }}</p>
+    {% endif %}
+
+    {% if opportunity.deadline or opportunity.funding_or_salary %}
+    <div class="opportunity-facts {% if opportunity.deadline and opportunity.funding_or_salary %}two{% else %}one{% endif %}">
+      {% if opportunity.deadline %}
+      <div class="fact-box">
+        <div class="fact-label">Deadline</div>
+        <div class="fact-value">{{ opportunity.deadline }}</div>
+      </div>
+      {% endif %}
+      {% if opportunity.funding_or_salary %}
+      <div class="fact-box">
+        <div class="fact-label">{{ funding_label }}</div>
+        <div class="fact-value accent">{{ opportunity.funding_or_salary }}</div>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if opportunity.eligibility %}
+    <div class="fact-box eligibility-box">
+      <div class="fact-label">Eligibility</div>
+      <div class="fact-value muted">{{ opportunity.eligibility }}</div>
+    </div>
+    {% endif %}
+
+    {% if opportunity.apply_url %}
+    <a class="apply-button" href="{{ opportunity.apply_url }}" target="_blank" rel="noopener noreferrer">
+      Apply Now <span aria-hidden="true">→</span>
+    </a>
+    {% endif %}
+  </article>
+
+  {% if opportunity.contact_name or opportunity.contact_email or opportunity.contact_phone or opportunity.source_url %}
+  <section class="opportunity-section">
+    <h2 class="section-heading">Contact Information</h2>
+    <div class="contact-row">
+      <div class="contact-avatar" aria-hidden="true">
+        {{ (opportunity.contact_name or opportunity.organization or "O")[0] | upper }}
+      </div>
+      <div class="contact-identity">
+        {% if opportunity.contact_name %}
+        <div class="contact-name">{{ opportunity.contact_name }}</div>
+        {% endif %}
+        {% if opportunity.organization %}
+        <div class="contact-org">{{ opportunity.organization }}</div>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if opportunity.contact_email %}
+    <div class="contact-detail">
+      <span class="contact-detail-label">Email</span>
+      <a href="mailto:{{ opportunity.contact_email }}">{{ opportunity.contact_email }}</a>
+    </div>
+    {% endif %}
+    {% if opportunity.contact_phone %}
+    <div class="contact-detail">
+      <span class="contact-detail-label">Phone</span>
+      <span>{{ opportunity.contact_phone }}</span>
+    </div>
+    {% endif %}
+    {% if opportunity.source_url %}
+    <div class="source-link">
+      Source:
+      <a href="{{ opportunity.source_url }}" target="_blank" rel="noopener noreferrer">
+        {{ source_label or opportunity.source_url }}
+      </a>
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if tips %}
+  <section class="opportunity-section">
+    <h2 class="section-heading">
+      Application Tips{% if display_name %} — Personalized for {{ display_name }}{% endif %}
+    </h2>
+    <ol class="tips-list">
+      {% for tip in tips %}
+      <li>
+        <span class="tip-index">{{ loop.index }}</span>
+        <span class="tip-text">{{ tip }}</span>
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

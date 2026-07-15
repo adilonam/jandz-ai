@@ -3,6 +3,35 @@
 from typing import Optional
 
 
+def _json_shape_instructions(max_items: int) -> str:
+    return (
+        f"Return STRICT JSON only (no markdown fences, no prose outside JSON) with exactly "
+        f"{max_items} items in this shape:\n"
+        "{\n"
+        '  "opportunities": [\n'
+        "    {\n"
+        '      "title": "Program or scholarship name",\n'
+        '      "organization": "University or provider",\n'
+        '      "category": "optional tag e.g. STUDY ABROAD",\n'
+        '      "location": "city/country",\n'
+        '      "description": "1-3 sentences",\n'
+        '      "deadline": "optional date or text",\n'
+        '      "funding_or_salary": "optional funding summary",\n'
+        '      "eligibility": "optional eligibility summary",\n'
+        '      "contact_name": "optional",\n'
+        '      "contact_email": "optional",\n'
+        '      "contact_phone": "optional",\n'
+        '      "source_url": "official site when confident",\n'
+        '      "apply_url": "apply or program URL when confident",\n'
+        '      "tips": ["optional tip 1", "optional tip 2"]\n'
+        "    }\n"
+        "  ]\n"
+        "}\n"
+        "Omit unknown optional fields or use null. Do not invent broken URLs; "
+        "if unsure of apply_url, use a useful search URL."
+    )
+
+
 def build_education_system_prompt(
     *,
     max_items: int,
@@ -18,9 +47,8 @@ def build_education_system_prompt(
         )
     else:
         location_rule = (
-            "No city/country was provided. Either ask in one short sentence for a "
-            "preferred city/country, or suggest well-known universities for the "
-            "requested degree field."
+            "No city/country was provided. Prefer well-known universities for the "
+            "requested degree field; leave location accurate when known."
         )
 
     return (
@@ -31,15 +59,7 @@ def build_education_system_prompt(
         "Match the degree level the user asked for (e.g. Master's, Bachelor's, MBA, PhD) "
         "and prefer fields aligned with their skills. "
         f"{location_rule} "
-        "Return a concise Telegram-ready numbered list of exactly "
-        f"{max_items} items when listing programs. "
-        "Each item: Program name — University — city/country — short reason it fits, "
-        "then a plain URL on the next line. "
-        "Prefer the university homepage or official program page when you are confident "
-        "it exists; do not invent fake URLs. If unsure of the exact program URL, use a "
-        "useful search URL (e.g. https://www.google.com/search?q=University+Master+Program). "
-        "No markdown tables. Label the list clearly as education opportunities "
-        "(university master's / degree programs)."
+        + _json_shape_instructions(max_items)
     )
 
 
@@ -60,7 +80,7 @@ def build_education_user_prompt(
             f"Parsed location: {location_label}",
             (
                 f"Suggest {max_items} university degree programs tailored to this request. "
-                "Include an official university or program URL for each item when possible."
+                "Fill optional fields when you know them. Return JSON only."
             ),
         ]
     )

@@ -125,6 +125,7 @@ async def init_db() -> None:
     from src.models.chat_user import ChatUser  # noqa: F401
     from src.models.conversation_message import ConversationMessage  # noqa: F401
     from src.models.job_search_history import JobSearchHistory  # noqa: F401
+    from src.models.opportunity import Opportunity  # noqa: F401
     from src.models.skill import Skill  # noqa: F401
 
     async with engine.begin() as conn:
