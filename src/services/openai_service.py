@@ -3,12 +3,22 @@
 import base64
 import json
 import re
-from typing import List, Optional, Sequence
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Sequence
 
 import httpx
 
 from src.config import settings
 from src.prompts import build_opportunity_prompts
+
+
+@dataclass
+class OpportunityGenerationResult:
+    """Structured AI opportunities with a text fallback when JSON parse fails."""
+
+    opportunities: List[Dict[str, Any]] = field(default_factory=list)
+    fallback_text: str = ""
+
 
 
 async def generate_openai_reply(user_text: str) -> str:
@@ -52,24 +62,76 @@ async def generate_openai_reply(user_text: str) -> str:
     return text or "Sorry, I could not generate a response right now."
 
 
-async def generate_opportunities_reply(
+def _parse_opportunities_json(raw_content: str) -> List[Dict[str, Any]]:
+    """Extract an opportunities array from model JSON (dict or bare list)."""
+    content = raw_content.strip()
+    if content.startswith("```"):
+        lines = content.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        content = "\n".join(lines).strip()
+
+    try:
+        parsed = json.loads(content)
+    except Exception:
+        # Best-effort: pull the outermost JSON object/array from mixed prose.
+        start_obj = content.find("{")
+        start_arr = content.find("[")
+        starts = [i for i in (start_obj, start_arr) if i >= 0]
+        if not starts:
+            return []
+        start = min(starts)
+        end_obj = content.rfind("}")
+        end_arr = content.rfind("]")
+        end = max(end_obj, end_arr)
+        if end <= start:
+            return []
+        try:
+            parsed = json.loads(content[start : end + 1])
+        except Exception:
+            return []
+
+    items: Any
+    if isinstance(parsed, dict):
+        items = parsed.get("opportunities")
+        if items is None:
+            items = parsed.get("items") or parsed.get("results")
+    elif isinstance(parsed, list):
+        items = parsed
+    else:
+        return []
+
+    if not isinstance(items, list):
+        return []
+    return [item for item in items if isinstance(item, dict)]
+
+
+async def generate_opportunities(
     opportunity_type: str,
     skill_names: Sequence[str],
     limit: Optional[int] = None,
     request_text: Optional[str] = None,
     location: Optional[str] = None,
-) -> str:
-    """Suggest education or job opportunities tailored to the user's skills via OpenAI."""
-    max_items = limit if limit is not None else settings.JOBS_TO_SHOW
+) -> OpportunityGenerationResult:
+    """Suggest education or job opportunities as structured JSON when possible."""
+    max_items = limit if limit is not None else 5
     kind = "education" if opportunity_type == "education" else "job"
     skills_label = ", ".join(name.strip() for name in skill_names if name.strip()) or (
         "general profile (skills not extracted yet)"
     )
+    error_fallback = (
+        f"I could not list {kind} opportunities right now. "
+        "Please try again in a moment, or reply with education or jobs."
+    )
 
     if not settings.OPENAI_API_KEY:
-        return (
-            f"I am not configured yet to list {kind} opportunities. "
-            "Please set OPENAI_API_KEY."
+        return OpportunityGenerationResult(
+            fallback_text=(
+                f"I am not configured yet to list {kind} opportunities. "
+                "Please set OPENAI_API_KEY."
+            )
         )
 
     prompts = build_opportunity_prompts(
@@ -87,6 +149,7 @@ async def generate_opportunities_reply(
             {"role": "user", "content": prompts.user},
         ],
         "temperature": 0.4,
+        "response_format": {"type": "json_object"},
     }
     headers = {
         "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
@@ -100,17 +163,62 @@ async def generate_opportunities_reply(
                 json=payload,
                 headers=headers,
             )
+            if resp.status_code >= 400:
+                # Some models reject response_format; retry without it.
+                payload.pop("response_format", None)
+                resp = await client.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    json=payload,
+                    headers=headers,
+                )
             resp.raise_for_status()
             data = resp.json()
         content = str(data["choices"][0]["message"]["content"]).strip()
-        if content:
-            return content
+        if not content:
+            return OpportunityGenerationResult(fallback_text=error_fallback)
+
+        opportunities = _parse_opportunities_json(content)
+        if opportunities:
+            return OpportunityGenerationResult(opportunities=opportunities[:max_items])
+
+        # Graceful fallback: send raw model text when it is not empty JSON prose.
+        if content.lstrip().startswith(("{", "[")):
+            return OpportunityGenerationResult(fallback_text=error_fallback)
+        return OpportunityGenerationResult(fallback_text=content)
     except Exception as exc:
         print(f"OpenAI opportunity listing failed: {exc}")
+        return OpportunityGenerationResult(fallback_text=error_fallback)
 
-    return (
-        f"I could not list {kind} opportunities right now. "
-        "Please try again in a moment, or reply with education or jobs."
+
+async def generate_opportunities_reply(
+    opportunity_type: str,
+    skill_names: Sequence[str],
+    limit: Optional[int] = None,
+    request_text: Optional[str] = None,
+    location: Optional[str] = None,
+) -> str:
+    """Compatibility wrapper returning free-text opportunity suggestions."""
+    result = await generate_opportunities(
+        opportunity_type,
+        skill_names,
+        limit=limit,
+        request_text=request_text,
+        location=location,
+    )
+    if result.fallback_text:
+        return result.fallback_text
+    lines = []
+    for index, item in enumerate(result.opportunities, start=1):
+        title = str(item.get("title") or f"Opportunity {index}").strip()
+        org = str(item.get("organization") or "").strip()
+        url = str(item.get("apply_url") or item.get("source_url") or "").strip()
+        heading = f"{index}. {title}" + (f" — {org}" if org else "")
+        lines.append(heading)
+        if url:
+            lines.append(url)
+        lines.append("")
+    return "\n".join(lines).rstrip() or (
+        "I could not list opportunities right now. Please try again."
     )
 
 

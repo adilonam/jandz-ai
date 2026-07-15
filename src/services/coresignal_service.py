@@ -196,7 +196,7 @@ async def search_jobs(
     limit: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Search job IDs then collect full rows needed by reply formatters."""
-    search_limit = limit if limit is not None else max(DEFAULT_SEARCH_LIMIT, settings.JOBS_TO_SHOW)
+    search_limit = limit if limit is not None else DEFAULT_SEARCH_LIMIT
     search_limit = max(1, min(int(search_limit), 1000))
     es_dsl = build_jobs_es_dsl(title=title, location=location, work_mode=work_mode)
 
