@@ -270,6 +270,8 @@ async def opportunities_reply_for_user(
             result.opportunities,
             opportunity_type=opportunity_type,
             chat_user_id=user.id,
+            skills=skill_names,
+            default_location=location,
         )
     except Exception as exc:
         print(f"Failed to persist opportunities: {exc}")
