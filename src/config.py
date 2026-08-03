@@ -22,7 +22,7 @@ class Settings:
 
     APP_NAME = os.getenv("APP_NAME", "jandz-ai").strip() or "jandz-ai"
     APP_VERSION = "0.1.0"
-    APP_DESCRIPTION = "Telegram + OpenAI FastAPI service."
+    APP_DESCRIPTION = "Telegram bot with OpenAI education search and CoreSignal job listings."
 
     ENV = _normalize_env(os.getenv("ENV", "dev"))
 

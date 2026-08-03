@@ -13,17 +13,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.db import get_db
-from src.schemas import CoresignalJobsSearchRequest, EchoRequest
+from src.schemas import (
+    CoresignalCollectRequest,
+    CoresignalJobsSearchRequest,
+    EchoRequest,
+    JobSearchParams,
+    JobSearchParamsExtractRequest,
+)
 from src.services.conversation_service import (
     list_conversation_user_summaries,
     list_messages_for_user,
 )
-from src.services.coresignal_service import search_jobs
+from src.services.coresignal_service import (
+    build_jobs_es_dsl,
+    collect_jobs,
+    search_and_collect_jobs,
+    search_jobs,
+)
 from src.services.job_search_history_service import (
     count_job_search_history,
     create_job_search_history,
     list_job_search_history,
 )
+from src.services.openai_service import extract_job_search_params
 from src.services.skill_service import list_skills
 from src.services.user_service import (
     delete_chat_user_by_id,
@@ -242,6 +254,22 @@ async def mcp_search_history_page(request: Request, db: AsyncSession = Depends(g
     )
 
 
+@router.post("/api/coresignal/extract-params")
+@router.post("/api/mcp/coresignal/extract-params")
+async def coresignal_extract_params_api(
+    request: Request,
+    body: JobSearchParamsExtractRequest,
+) -> JobSearchParams:
+    _require_auth(request)
+    try:
+        return await extract_job_search_params(body.prompt)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Parameter extraction failed: {exc}",
+        ) from exc
+
+
 @router.post("/api/coresignal/jobs")
 @router.post("/api/mcp/coresignal/jobs")
 async def coresignal_jobs_api(
@@ -251,23 +279,106 @@ async def coresignal_jobs_api(
 ) -> Dict[str, Any]:
     _require_auth(request)
     try:
-        result = await search_jobs(
-            title=body.title,
-            location=body.location,
-            work_mode=body.work_mode,
-            limit=body.limit,
-        )
+        title = body.title
+        location = body.location
+        work_mode = body.work_mode
+        limit = body.limit
+        extracted: JobSearchParams | None = None
+
+        if body.prompt.strip() and body.es_dsl is None:
+            extracted = await extract_job_search_params(body.prompt.strip())
+            if not title.strip() and extracted.title:
+                title = extracted.title
+            if not location.strip():
+                location = extracted.location or extracted.country
+            if not work_mode.strip() and extracted.work_mode:
+                work_mode = extracted.work_mode
+            if limit is None and extracted.limit:
+                limit = extracted.limit
+
+        es_dsl = body.es_dsl
+        if es_dsl is None:
+            if not title.strip():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Provide title, prompt, or es_dsl.",
+                )
+            es_dsl = build_jobs_es_dsl(
+                title=title,
+                location=location,
+                work_mode=work_mode,
+            )
+
+        if body.collect:
+            result = await search_and_collect_jobs(
+                title=title,
+                location=location,
+                work_mode=work_mode,
+                limit=limit,
+                es_dsl=es_dsl,
+                after=body.after,
+            )
+            history_payload = result["history_payload"]
+            if extracted:
+                history_payload.setdefault("request", {})["prompt"] = body.prompt.strip()
+                history_payload["request"]["extracted_params"] = extracted.model_dump()
+        else:
+            search_meta = await search_jobs(
+                es_dsl,
+                after=body.after,
+                items_per_page=limit,
+            )
+            history_payload = {
+                "request": {
+                    "prompt": body.prompt.strip() or None,
+                    "title": title,
+                    "location": location,
+                    "work_mode": work_mode,
+                    "limit": limit,
+                    "after": body.after,
+                    "es_dsl": es_dsl,
+                    "collect": False,
+                },
+                "search": search_meta,
+                "jobs": [],
+                "collect_errors": [],
+                "jobs_count": 0,
+            }
+            if extracted:
+                history_payload["request"]["extracted_params"] = extracted.model_dump()
+
         prompt_query = (
-            f"title={body.title}; location={body.location}; "
-            f"work_mode={body.work_mode}; limit={body.limit}"
+            f"prompt={body.prompt.strip()!r}; title={title}; location={location}; "
+            f"work_mode={work_mode}; limit={limit}; collect={body.collect}"
         )
         await create_job_search_history(
             db,
             prompt_query=prompt_query,
-            response_payload=result["history_payload"],
+            response_payload=history_payload,
             provider="coresignal_api",
         )
-        return result["history_payload"]
+        return history_payload
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.post("/api/coresignal/collect")
+@router.post("/api/mcp/coresignal/collect")
+async def coresignal_collect_api(
+    request: Request,
+    body: CoresignalCollectRequest,
+) -> Dict[str, Any]:
+    _require_auth(request)
+    try:
+        result = await collect_jobs(body.job_ids)
+        return {
+            "job_ids": body.job_ids,
+            "jobs": result["jobs"],
+            "jobs_count": result["jobs_count"],
+            "collect_errors": result["collect_errors"],
+        }
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -329,6 +440,19 @@ async def delete_user(
     _require_auth(request)
     await delete_chat_user_by_id(db, user_id)
     return RedirectResponse("/users", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/bot")
+async def bot_landing_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="core/bot.html",
+        context={
+            "bot_name": settings.APP_NAME,
+            "bot_username": "jandzaibot",
+            "telegram_url": "https://t.me/jandzaibot",
+        },
+    )
 
 
 @router.get("/health")

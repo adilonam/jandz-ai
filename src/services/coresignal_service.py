@@ -71,6 +71,7 @@ def build_jobs_es_dsl(
         must.append({"term": {"accepts_remote": True}})
     elif mode == "onsite":
         must.append({"term": {"accepts_remote": False}})
+    # hybrid: no accepts_remote filter — location/title constraints still apply
 
     if not must:
         must.append({"match_all": {}})
@@ -110,24 +111,29 @@ def _job_summary_for_history(job: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-async def search_job_ids(
-    es_dsl: Dict[str, Any],
+async def search_jobs(
+    es_dsl_query: Dict[str, Any],
     *,
-    limit: int = DEFAULT_SEARCH_LIMIT,
+    after: Optional[str] = None,
+    items_per_page: Optional[int] = None,
     client: Optional[httpx.AsyncClient] = None,
 ) -> Dict[str, Any]:
-    """POST search/es_dsl and return matching job IDs plus response metadata."""
-    items_per_page = max(1, min(int(limit), 1000))
+    """POST search/es_dsl and return matching job IDs plus pagination metadata."""
+    page_size = items_per_page if items_per_page is not None else DEFAULT_SEARCH_LIMIT
+    page_size = max(1, min(int(page_size), 1000))
     headers = _auth_headers()
     owns_client = client is None
     http = client or httpx.AsyncClient(timeout=REQUEST_TIMEOUT)
+    params: Dict[str, Any] = {"items_per_page": page_size}
+    if after:
+        params["after"] = after
 
     try:
         response = await http.post(
             SEARCH_URL,
             headers=headers,
-            params={"items_per_page": items_per_page},
-            json=es_dsl,
+            params=params,
+            json=es_dsl_query,
         )
         response.raise_for_status()
         payload = response.json()
@@ -137,6 +143,8 @@ async def search_job_ids(
         return {
             "job_ids": job_ids,
             "total_results": response.headers.get("x-total-results"),
+            "total_pages": response.headers.get("x-total-pages"),
+            "next_page_after": response.headers.get("x-next-page-after"),
             "items_per_page": response.headers.get("x-items-per-page"),
             "credits_remaining": response.headers.get("x-credits-remaining"),
         }
@@ -148,6 +156,22 @@ async def search_job_ids(
     finally:
         if owns_client:
             await http.aclose()
+
+
+async def search_job_ids(
+    es_dsl: Dict[str, Any],
+    *,
+    limit: int = DEFAULT_SEARCH_LIMIT,
+    after: Optional[str] = None,
+    client: Optional[httpx.AsyncClient] = None,
+) -> Dict[str, Any]:
+    """Compatibility wrapper around :func:`search_jobs`."""
+    return await search_jobs(
+        es_dsl,
+        after=after,
+        items_per_page=limit,
+        client=client,
+    )
 
 
 async def collect_job(
@@ -188,36 +212,81 @@ async def collect_job(
             await http.aclose()
 
 
-async def search_jobs(
+async def collect_jobs(
+    job_ids: List[Any],
+    *,
+    client: Optional[httpx.AsyncClient] = None,
+) -> Dict[str, Any]:
+    """Collect full job rows for one or more IDs."""
+    owns_client = client is None
+    http = client or httpx.AsyncClient(timeout=REQUEST_TIMEOUT)
+    jobs: List[Dict[str, Any]] = []
+    collect_errors: List[str] = []
+
+    try:
+        collected = await asyncio.gather(
+            *[collect_job(job_id, client=http) for job_id in job_ids],
+            return_exceptions=True,
+        )
+        for result in collected:
+            if isinstance(result, Exception):
+                collect_errors.append(str(result))
+                continue
+            jobs.append(result)
+    finally:
+        if owns_client:
+            await http.aclose()
+
+    return {
+        "jobs": jobs,
+        "collect_errors": collect_errors[:10],
+        "jobs_count": len(jobs),
+    }
+
+
+async def search_and_collect_jobs(
     *,
     title: str,
     location: str = "",
     work_mode: str = "",
     limit: Optional[int] = None,
+    es_dsl: Optional[Dict[str, Any]] = None,
+    after: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Search job IDs then collect full rows needed by reply formatters."""
     search_limit = limit if limit is not None else DEFAULT_SEARCH_LIMIT
     search_limit = max(1, min(int(search_limit), 1000))
-    es_dsl = build_jobs_es_dsl(title=title, location=location, work_mode=work_mode)
+    query = es_dsl or build_jobs_es_dsl(title=title, location=location, work_mode=work_mode)
+
+    print(
+        f"[job_search] CoreSignal search_and_collect_jobs title={title!r} "
+        f"location={location!r} work_mode={work_mode!r} limit={search_limit}"
+    )
 
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
         try:
-            search_meta = await search_job_ids(es_dsl, limit=search_limit, client=client)
-            job_ids = search_meta["job_ids"]
-            collected = await asyncio.gather(
-                *[collect_job(job_id, client=client) for job_id in job_ids],
-                return_exceptions=True,
+            search_meta = await search_jobs(
+                query,
+                after=after,
+                items_per_page=search_limit,
+                client=client,
             )
+            job_ids = search_meta["job_ids"]
+            print(
+                f"[job_search] CoreSignal search matched {len(job_ids)} job_ids "
+                f"total_results={search_meta.get('total_results')!r}"
+            )
+            collected = await collect_jobs(job_ids, client=client)
         except httpx.HTTPError as exc:
+            print(f"[job_search] CoreSignal HTTP error: {exc}")
             raise RuntimeError(f"CoreSignal request failed: {exc}") from exc
 
-    jobs: List[Dict[str, Any]] = []
-    collect_errors: List[str] = []
-    for result in collected:
-        if isinstance(result, Exception):
-            collect_errors.append(str(result))
-            continue
-        jobs.append(result)
+    jobs = collected["jobs"]
+    collect_errors = collected["collect_errors"]
+    print(
+        f"[job_search] CoreSignal collected {len(jobs)} jobs "
+        f"collect_errors={len(collect_errors)}"
+    )
 
     history_payload = {
         "request": {
@@ -225,16 +294,46 @@ async def search_jobs(
             "location": location,
             "work_mode": work_mode,
             "limit": search_limit,
-            "es_dsl": es_dsl,
+            "after": after,
+            "es_dsl": query,
         },
         "search": {
             "job_ids": job_ids,
             "total_results": search_meta.get("total_results"),
+            "total_pages": search_meta.get("total_pages"),
+            "next_page_after": search_meta.get("next_page_after"),
             "items_per_page": search_meta.get("items_per_page"),
             "credits_remaining": search_meta.get("credits_remaining"),
         },
         "jobs": [_job_summary_for_history(job) for job in jobs],
-        "collect_errors": collect_errors[:10],
+        "collect_errors": collect_errors,
         "jobs_count": len(jobs),
     }
-    return {"jobs": jobs, "history_payload": history_payload, "es_dsl": es_dsl}
+    return {"jobs": jobs, "history_payload": history_payload, "es_dsl": query}
+
+
+def coresignal_job_to_opportunity_payload(job: Dict[str, Any]) -> Dict[str, Any]:
+    """Map a collected CoreSignal job row into opportunity persistence fields."""
+    category_parts: List[str] = []
+    if job.get("accepts_remote") is True:
+        category_parts.append("REMOTE")
+    employment_type = str(job.get("employment_type") or "").strip()
+    if employment_type:
+        category_parts.append(employment_type)
+
+    location = (
+        str(job.get("location") or "").strip()
+        or str(job.get("city") or "").strip()
+        or str(job.get("country") or "").strip()
+    )
+    external_url = str(job.get("external_url") or job.get("url") or "").strip()
+
+    return {
+        "title": str(job.get("title") or "").strip(),
+        "organization": str(job.get("company_name") or "").strip(),
+        "category": " · ".join(category_parts) or None,
+        "location": location or None,
+        "description": str(job.get("description") or "").strip() or None,
+        "apply_url": external_url or None,
+        "source_url": external_url or None,
+    }

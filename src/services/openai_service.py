@@ -10,6 +10,7 @@ import httpx
 
 from src.config import settings
 from src.prompts import build_opportunity_prompts
+from src.schemas import JobSearchParams
 
 
 @dataclass
@@ -142,6 +143,13 @@ async def generate_opportunities(
         location=location,
     )
 
+    print(
+        f"[{'education_search' if opportunity_type == 'education' else 'opportunity_search'}] "
+        f"OpenAI API call model={settings.OPENAI_MODEL!r} "
+        f"type={opportunity_type!r} skills={skills_label!r} location={location!r} "
+        f"max_items={max_items} request_text={request_text!r}"
+    )
+
     payload = {
         "model": settings.OPENAI_MODEL,
         "messages": [
@@ -179,7 +187,12 @@ async def generate_opportunities(
 
         opportunities = _parse_opportunities_json(content)
         if opportunities:
-            return OpportunityGenerationResult(opportunities=opportunities[:max_items])
+            trimmed = opportunities[:max_items]
+            print(
+                f"[{'education_search' if opportunity_type == 'education' else 'opportunity_search'}] "
+                f"OpenAI parsed {len(trimmed)} opportunities type={opportunity_type!r}"
+            )
+            return OpportunityGenerationResult(opportunities=trimmed)
 
         # Graceful fallback: send raw model text when it is not empty JSON prose.
         if content.lstrip().startswith(("{", "[")):
@@ -536,6 +549,159 @@ async def extract_skills_from_resume_pdf(
             seen.add(name)
             matched.append(name)
     return matched
+
+
+def _regex_fallback_job_search_params(prompt: str) -> JobSearchParams:
+    """Minimal regex fallback when OpenAI extraction fails (no cross-module imports)."""
+    import re
+
+    normalized = " ".join(prompt.strip().split())
+    work_mode = ""
+    if re.search(r"\bremote\b|\bwork from home\b|\bwfh\b", normalized, re.I):
+        work_mode = "remote"
+    elif re.search(r"\bhybrid\b", normalized, re.I):
+        work_mode = "hybrid"
+    elif re.search(r"\bonsite\b|\bon-site\b|\bon site\b", normalized, re.I):
+        work_mode = "onsite"
+
+    title = ""
+    loc_match = re.search(
+        r"\b(?:in|at|near|from)\s+([A-Za-z][A-Za-z\s\-']{1,40})",
+        normalized,
+        re.I,
+    )
+    location = loc_match.group(1).strip(" .,!?:;").title() if loc_match else ""
+
+    job_for = re.search(
+        r"\b(?:jobs?|positions?|roles?|openings?|vacancies?)\s+for\s+(.+?)"
+        r"(?:\s+\b(?:in|at|near|from)\b|$)",
+        normalized,
+        re.I,
+    )
+    if job_for:
+        title = job_for.group(1).strip(" ,")
+    else:
+        title_jobs = re.search(
+            r"^(.+?)\s+(?:jobs?|positions?|roles?|openings?|vacancies?)\b",
+            normalized,
+            re.I,
+        )
+        if title_jobs:
+            title = title_jobs.group(1).strip(" ,")
+        elif loc_match:
+            title = normalized[: loc_match.start()].strip(" ,")
+
+    return JobSearchParams(
+        title=title,
+        location=location,
+        country=location,
+        work_mode=work_mode,
+        limit=5,
+    )
+
+
+async def extract_job_search_params(prompt: str) -> JobSearchParams:
+    """Extract structured job search params from a natural language prompt."""
+    cleaned = (prompt or "").strip()
+    if not cleaned:
+        return JobSearchParams()
+
+    if not settings.OPENAI_API_KEY:
+        params = _regex_fallback_job_search_params(cleaned)
+        print(
+            f"[job_search] OpenAI extracted params (regex fallback): "
+            f"title={params.title!r} location={params.location!r} "
+            f"country={params.country!r} work_mode={params.work_mode!r} limit={params.limit}"
+        )
+        return params
+
+    system_prompt = (
+        "You extract job search parameters from natural language. "
+        "Return strict JSON only in this shape: "
+        '{"title": "role or job title", "location": "city or region", '
+        '"country": "country name", "work_mode": "remote or onsite or hybrid or empty string", '
+        '"limit": 5}. '
+        "Rules: title is the job role (e.g. truck driver, software engineer, nurse). "
+        "location is city/region when specified; country is the country name. "
+        "When only a country is given (e.g. Germany), set both location and country to that value. "
+        "work_mode is remote, onsite, hybrid, or empty if not specified. "
+        "limit is how many results the user wants (default 5, max 20)."
+    )
+    payload = {
+        "model": settings.OPENAI_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": cleaned},
+        ],
+        "temperature": 0,
+        "response_format": {"type": "json_object"},
+    }
+    headers = {
+        "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                json=payload,
+                headers=headers,
+            )
+            if resp.status_code >= 400:
+                payload.pop("response_format", None)
+                resp = await client.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    json=payload,
+                    headers=headers,
+                )
+            resp.raise_for_status()
+            data = resp.json()
+        content = str(data["choices"][0]["message"]["content"]).strip()
+        parsed = _safe_json_loads(content)
+        if not parsed:
+            raise ValueError("Could not parse OpenAI JSON response")
+
+        work_mode = str(parsed.get("work_mode") or "").strip().lower()
+        if work_mode not in ("remote", "onsite", "hybrid"):
+            work_mode = ""
+
+        raw_limit = parsed.get("limit", 5)
+        try:
+            limit = int(raw_limit)
+        except (TypeError, ValueError):
+            limit = 5
+        limit = max(1, min(limit, 20))
+
+        location = str(parsed.get("location") or "").strip()
+        country = str(parsed.get("country") or "").strip()
+        if not location and country:
+            location = country
+        if not country and location:
+            country = location
+
+        params = JobSearchParams(
+            title=str(parsed.get("title") or "").strip(),
+            location=location,
+            country=country,
+            work_mode=work_mode,
+            limit=limit,
+        )
+        print(
+            f"[job_search] OpenAI extracted params: title={params.title!r} "
+            f"location={params.location!r} country={params.country!r} "
+            f"work_mode={params.work_mode!r} limit={params.limit}"
+        )
+        return params
+    except Exception as exc:
+        print(f"[job_search] OpenAI extraction failed, using regex fallback: {exc}")
+        params = _regex_fallback_job_search_params(cleaned)
+        print(
+            f"[job_search] OpenAI extracted params (regex fallback): "
+            f"title={params.title!r} location={params.location!r} "
+            f"country={params.country!r} work_mode={params.work_mode!r} limit={params.limit}"
+        )
+        return params
 
 
 async def transcribe_audio_to_text(
