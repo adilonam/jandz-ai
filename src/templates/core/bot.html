@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}jandz-ai · Telegram Bot{% endblock %}
+{% block body_class %}bot-page{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="/static/css/bot.css" />
+
+<main class="bot-shell">
+  <section class="bot-hero">
+    <div class="bot-badge" aria-hidden="true">
+      <svg class="bot-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path
+          d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"
+          fill="currentColor"
+        />
+      </svg>
+    </div>
+
+    <p class="bot-handle">@{{ bot_username }}</p>
+    <h1 class="bot-title">{{ bot_name }}</h1>
+    <p class="bot-tagline">
+      Your AI guide on Telegram for education and job opportunities — tailored to your skills and goals.
+    </p>
+
+    <a
+      class="bot-cta"
+      href="{{ telegram_url }}"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      Chat on Telegram
+      <span class="bot-cta-arrow" aria-hidden="true">→</span>
+    </a>
+  </section>
+
+  <section class="bot-features">
+    <h2 class="bot-section-heading">What you can do</h2>
+    <ul class="bot-feature-list">
+      <li>
+        <span class="bot-feature-icon" aria-hidden="true">📄</span>
+        <div>
+          <strong>Upload your CV</strong>
+          <p>Send your resume as a PDF and the bot extracts your skills automatically.</p>
+        </div>
+      </li>
+      <li>
+        <span class="bot-feature-icon" aria-hidden="true">🎓</span>
+        <div>
+          <strong>Find education</strong>
+          <p>Discover courses, scholarships, and programs matched to your profile (powered by OpenAI).</p>
+        </div>
+      </li>
+      <li>
+        <span class="bot-feature-icon" aria-hidden="true">💼</span>
+        <div>
+          <strong>Explore jobs</strong>
+          <p>Search live job listings from CoreSignal matched to your skills, location, and preferences.</p>
+        </div>
+      </li>
+      <li>
+        <span class="bot-feature-icon" aria-hidden="true">💬</span>
+        <div>
+          <strong>Ask anything</strong>
+          <p>Chat naturally — text or voice — and get clear, concise guidance.</p>
+        </div>
+      </li>
+    </ul>
+  </section>
+
+  <p class="bot-footer">
+    Open Telegram and start a conversation with
+    <a href="{{ telegram_url }}" target="_blank" rel="noopener noreferrer">@{{ bot_username }}</a>.
+  </p>
+</main>
+{% endblock %}

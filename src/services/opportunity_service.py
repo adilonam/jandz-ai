@@ -96,12 +96,13 @@ def normalize_opportunity_payload(
     if kind == "job":
         if not location:
             location = _optional_str(default_location, max_len=255)
-        # Prefer durable LinkedIn search links over closed /jobs/view/ postings.
-        apply_url = build_linkedin_jobs_search_url(
-            title=title,
-            location=location,
-            skills=skills,
-        )
+        # Keep real listing URLs (e.g. CoreSignal external_url); synthesize LinkedIn search only when missing.
+        if not apply_url:
+            apply_url = build_linkedin_jobs_search_url(
+                title=title,
+                location=location,
+                skills=skills,
+            )
         if _is_linkedin_direct_job_url(source_url):
             source_url = None
 

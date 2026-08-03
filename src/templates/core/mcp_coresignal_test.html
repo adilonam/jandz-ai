@@ -22,39 +22,108 @@
       (<code>search/es_dsl</code> + <code>collect</code>).
     </p>
 
+    <div class="form-row mcp-mode-toggle">
+      <label class="radio-label">
+        <input type="radio" name="search_mode" value="prompt" checked />
+        Prompt (natural language)
+      </label>
+      <label class="radio-label">
+        <input type="radio" name="search_mode" value="simple" />
+        Simple fields
+      </label>
+      <label class="radio-label">
+        <input type="radio" name="search_mode" value="dsl" />
+        ES DSL JSON
+      </label>
+    </div>
+
     <form id="coresignal-test-form" class="mcp-test-form">
-      <label for="title">Job title / query</label>
-      <input id="title" name="title" type="text" placeholder="Example: product manager" required />
+      <div id="prompt-fields">
+        <label for="prompt">Job search prompt</label>
+        <textarea
+          id="prompt"
+          name="prompt"
+          rows="3"
+          placeholder="Example: give me jobs for truck driver in Germany"
+        ></textarea>
+        <p class="muted">
+          OpenAI extracts title, location, country, and work mode from your prompt before searching.
+        </p>
+      </div>
 
-      <label for="location">Location</label>
-      <input id="location" name="location" type="text" placeholder="Example: Los Angeles" />
+      <div id="simple-fields" hidden>
+        <label for="title">Job title / query</label>
+        <input id="title" name="title" type="text" placeholder="Example: truck driver" />
 
-      <div class="form-row">
-        <div class="form-field">
-          <label for="work_mode">Work mode</label>
-          <select id="work_mode" name="work_mode">
-            <option value="">Any</option>
-            <option value="remote">Remote</option>
-            <option value="onsite">Onsite</option>
-          </select>
-        </div>
-        <div class="form-field">
-          <label for="limit">Limit (optional)</label>
-          <input
-            id="limit"
-            name="limit"
-            type="number"
-            min="1"
-            max="100"
-            placeholder="Default 20"
-          />
+        <label for="location">Location</label>
+        <input id="location" name="location" type="text" placeholder="Example: Hungary" />
+
+        <div class="form-row">
+          <div class="form-field">
+            <label for="work_mode">Work mode</label>
+            <select id="work_mode" name="work_mode">
+              <option value="">Any</option>
+              <option value="remote">Remote</option>
+              <option value="onsite">Onsite</option>
+              <option value="hybrid">Hybrid</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="limit">Limit (optional)</label>
+            <input
+              id="limit"
+              name="limit"
+              type="number"
+              min="1"
+              max="100"
+              placeholder="Default 20"
+            />
+          </div>
         </div>
       </div>
+
+      <div id="dsl-fields" hidden>
+        <label for="es_dsl">Elasticsearch DSL body</label>
+        <textarea
+          id="es_dsl"
+          name="es_dsl"
+          rows="12"
+          spellcheck="false"
+          placeholder='{"query":{"bool":{"must":[{"match":{"title":"Software Engineer"}},{"match":{"location":"Germany"}}]}}}'
+        ></textarea>
+        <div class="form-row">
+          <div class="form-field">
+            <label for="dsl_limit">Items per page</label>
+            <input
+              id="dsl_limit"
+              name="dsl_limit"
+              type="number"
+              min="1"
+              max="1000"
+              placeholder="Default 20"
+            />
+          </div>
+          <div class="form-field">
+            <label for="after">Pagination after (optional)</label>
+            <input id="after" name="after" type="text" placeholder="x-next-page-after value" />
+          </div>
+        </div>
+      </div>
+
+      <label class="checkbox-label">
+        <input id="collect_after_search" type="checkbox" checked />
+        Collect full job records after search (uses collect credits)
+      </label>
 
       <button id="submit-btn" type="submit">Run Search</button>
     </form>
 
     <div id="error-box" class="api-error" hidden></div>
+
+    <div id="extracted-params" class="result-section" hidden>
+      <h2>Extracted parameters</h2>
+      <dl id="extracted-summary" class="result-summary"></dl>
+    </div>
 
     <div id="results" class="coresignal-results" hidden>
       <div class="result-section">
@@ -81,16 +150,54 @@
       </details>
     </div>
   </section>
+
+  <section class="card mcp-test-card">
+    <h2>Collect by job ID</h2>
+    <p class="muted">
+      Fetch full job records for one or more IDs returned from search (comma or newline separated).
+    </p>
+    <form id="collect-form" class="mcp-test-form">
+      <label for="collect_ids">Job IDs</label>
+      <textarea
+        id="collect_ids"
+        name="collect_ids"
+        rows="4"
+        placeholder="987654321&#10;987654322"
+        required
+      ></textarea>
+      <button id="collect-btn" type="submit">Collect jobs</button>
+    </form>
+    <div id="collect-error-box" class="api-error" hidden></div>
+    <div id="collect-results" class="coresignal-results" hidden>
+      <div id="collect-jobs-list" class="jobs-list"></div>
+      <p id="manual-collect-errors" class="api-error" hidden></p>
+      <details class="raw-json-details">
+        <summary>Raw collect JSON</summary>
+        <pre id="collect-raw-json" class="mcp-output">{}</pre>
+      </details>
+    </div>
+  </section>
 </div>
 
 <script>
   const form = document.getElementById("coresignal-test-form");
+  const modeRadios = document.querySelectorAll('input[name="search_mode"]');
+  const promptFields = document.getElementById("prompt-fields");
+  const promptInput = document.getElementById("prompt");
+  const simpleFields = document.getElementById("simple-fields");
+  const dslFields = document.getElementById("dsl-fields");
   const titleInput = document.getElementById("title");
   const locationInput = document.getElementById("location");
   const workModeInput = document.getElementById("work_mode");
   const limitInput = document.getElementById("limit");
+  const esDslInput = document.getElementById("es_dsl");
+  const dslLimitInput = document.getElementById("dsl_limit");
+  const afterInput = document.getElementById("after");
+  const collectAfterSearchInput = document.getElementById("collect_after_search");
   const submitBtn = document.getElementById("submit-btn");
   const errorBox = document.getElementById("error-box");
+  const extractedParams = document.getElementById("extracted-params");
+  const extractedSummary = document.getElementById("extracted-summary");
   const results = document.getElementById("results");
   const requestSummary = document.getElementById("request-summary");
   const searchSummary = document.getElementById("search-summary");
@@ -99,6 +206,32 @@
   const jobsCount = document.getElementById("jobs-count");
   const collectErrors = document.getElementById("collect-errors");
   const rawJson = document.getElementById("raw-json");
+
+  const collectForm = document.getElementById("collect-form");
+  const collectIdsInput = document.getElementById("collect_ids");
+  const collectBtn = document.getElementById("collect-btn");
+  const collectErrorBox = document.getElementById("collect-error-box");
+  const collectResults = document.getElementById("collect-results");
+  const collectJobsList = document.getElementById("collect-jobs-list");
+  const manualCollectErrors = document.getElementById("manual-collect-errors");
+  const collectRawJson = document.getElementById("collect-raw-json");
+
+  function currentMode() {
+    const selected = document.querySelector('input[name="search_mode"]:checked');
+    return selected ? selected.value : "prompt";
+  }
+
+  function updateModeVisibility() {
+    const mode = currentMode();
+    promptFields.hidden = mode !== "prompt";
+    simpleFields.hidden = mode !== "simple";
+    dslFields.hidden = mode !== "dsl";
+  }
+
+  modeRadios.forEach((radio) => {
+    radio.addEventListener("change", updateModeVisibility);
+  });
+  updateModeVisibility();
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -110,6 +243,7 @@
 
   function showError(message) {
     results.hidden = true;
+    extractedParams.hidden = true;
     errorBox.hidden = false;
     errorBox.textContent = message;
   }
@@ -119,8 +253,64 @@
     errorBox.textContent = "";
   }
 
+  function showCollectError(message) {
+    collectResults.hidden = true;
+    collectErrorBox.hidden = false;
+    collectErrorBox.textContent = message;
+  }
+
+  function clearCollectError() {
+    collectErrorBox.hidden = true;
+    collectErrorBox.textContent = "";
+  }
+
   function dlRow(label, value) {
     return `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value ?? "—")}</dd></div>`;
+  }
+
+  function renderJobCards(container, jobs) {
+    if (!jobs.length) {
+      container.innerHTML = `<p class="muted">No job records collected.</p>`;
+      return;
+    }
+    container.innerHTML = jobs
+      .map((job) => {
+        const title = escapeHtml(job.title || "Untitled");
+        const company = escapeHtml(job.company_name || job.organization || "Unknown company");
+        const location = escapeHtml(job.location || job.country || "—");
+        const url = String(job.url || job.external_url || job.apply_url || "").trim();
+        const link = url
+          ? `<a class="download-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Open listing</a>`
+          : `<span class="muted">No URL</span>`;
+        const remote =
+          job.accepts_remote === true
+            ? "Remote OK"
+            : job.accepts_remote === false
+              ? "Onsite"
+              : "";
+        const meta = [job.employment_type, remote].filter(Boolean).map(escapeHtml).join(" · ");
+        return `
+          <article class="job-result-card">
+            <h3>${title}</h3>
+            <p class="job-meta">${company}</p>
+            <p class="muted">${location}${meta ? ` · ${meta}` : ""}</p>
+            <p class="job-id muted">ID: ${escapeHtml(job.id)}</p>
+            ${link}
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  function renderExtractedParams(params) {
+    extractedSummary.innerHTML = [
+      dlRow("Title", params.title || "—"),
+      dlRow("Location", params.location || "—"),
+      dlRow("Country", params.country || "—"),
+      dlRow("Work mode", params.work_mode || "any"),
+      dlRow("Limit", params.limit),
+    ].join("");
+    extractedParams.hidden = false;
   }
 
   function renderResults(data) {
@@ -129,18 +319,27 @@
 
     const request = data.request || {};
     requestSummary.innerHTML = [
-      dlRow("Title", request.title),
+      dlRow("Prompt", request.prompt || "—"),
+      dlRow("Title", request.title || "(from ES DSL)"),
       dlRow("Location", request.location || "(any)"),
       dlRow("Work mode", request.work_mode || "any"),
       dlRow("Limit", request.limit),
+      dlRow("After", request.after),
+      dlRow("Collect", request.collect === false ? "no" : "yes"),
       dlRow("ES DSL", JSON.stringify(request.es_dsl || {})),
     ].join("");
+
+    if (request.extracted_params) {
+      renderExtractedParams(request.extracted_params);
+    }
 
     const search = data.search || {};
     const ids = search.job_ids || [];
     searchSummary.innerHTML = [
       dlRow("IDs returned", ids.length),
       dlRow("Total results", search.total_results),
+      dlRow("Total pages", search.total_pages),
+      dlRow("Next page after", search.next_page_after),
       dlRow("Items per page", search.items_per_page),
       dlRow("Credits remaining", search.credits_remaining),
     ].join("");
@@ -148,37 +347,7 @@
 
     const jobs = data.jobs || [];
     jobsCount.textContent = `(${data.jobs_count ?? jobs.length})`;
-    if (!jobs.length) {
-      jobsList.innerHTML = `<p class="muted">No job records collected.</p>`;
-    } else {
-      jobsList.innerHTML = jobs
-        .map((job) => {
-          const title = escapeHtml(job.title || "Untitled");
-          const company = escapeHtml(job.company_name || "Unknown company");
-          const location = escapeHtml(job.location || job.country || "—");
-          const url = String(job.url || job.external_url || "").trim();
-          const link = url
-            ? `<a class="download-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Open listing</a>`
-            : `<span class="muted">No URL</span>`;
-          const remote =
-            job.accepts_remote === true
-              ? "Remote OK"
-              : job.accepts_remote === false
-                ? "Onsite"
-                : "";
-          const meta = [job.employment_type, remote].filter(Boolean).map(escapeHtml).join(" · ");
-          return `
-            <article class="job-result-card">
-              <h3>${title}</h3>
-              <p class="job-meta">${company}</p>
-              <p class="muted">${location}${meta ? ` · ${meta}` : ""}</p>
-              <p class="job-id muted">ID: ${escapeHtml(job.id)}</p>
-              ${link}
-            </article>
-          `;
-        })
-        .join("");
-    }
+    renderJobCards(jobsList, jobs);
 
     const errors = data.collect_errors || [];
     if (errors.length) {
@@ -192,36 +361,114 @@
     rawJson.textContent = JSON.stringify(data, null, 2);
   }
 
+  function parseLimit(raw, maxValue, fieldName) {
+    if (!raw) return undefined;
+    const limit = Number(raw);
+    if (!Number.isInteger(limit) || limit < 1 || limit > maxValue) {
+      throw new Error(`${fieldName} must be an integer between 1 and ${maxValue}.`);
+    }
+    return limit;
+  }
+
+  function parseJobIds(text) {
+    return text
+      .split(/[\s,]+/)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const value = Number(part);
+        if (!Number.isFinite(value)) {
+          throw new Error(`Invalid job ID: ${part}`);
+        }
+        return value;
+      });
+  }
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
 
-    const title = titleInput.value.trim();
-    if (!title) {
-      showError("Title is required.");
+    const payload = { collect: collectAfterSearchInput.checked };
+    const mode = currentMode();
+
+    try {
+      if (mode === "prompt") {
+        const prompt = promptInput.value.trim();
+        if (!prompt) {
+          showError("Prompt is required in prompt mode.");
+          return;
+        }
+        payload.prompt = prompt;
+        payload.title = "";
+        payload.location = "";
+        payload.work_mode = "";
+      } else if (mode === "dsl") {
+        const rawDsl = esDslInput.value.trim();
+        if (!rawDsl) {
+          showError("ES DSL JSON is required in DSL mode.");
+          return;
+        }
+        let parsedDsl;
+        try {
+          parsedDsl = JSON.parse(rawDsl);
+        } catch (_parseError) {
+          showError("ES DSL must be valid JSON.");
+          return;
+        }
+        payload.es_dsl = parsedDsl;
+        payload.title = "";
+        payload.location = "";
+        payload.work_mode = "";
+        payload.limit = parseLimit(dslLimitInput.value.trim(), 1000, "Items per page");
+        const after = afterInput.value.trim();
+        if (after) payload.after = after;
+      } else {
+        const title = titleInput.value.trim();
+        if (!title) {
+          showError("Title is required in simple mode.");
+          return;
+        }
+        payload.title = title;
+        payload.location = locationInput.value.trim();
+        payload.work_mode = workModeInput.value.trim();
+        payload.limit = parseLimit(limitInput.value.trim(), 100, "Limit");
+      }
+    } catch (validationError) {
+      showError(String(validationError));
       return;
     }
 
-    const payload = {
-      title,
-      location: locationInput.value.trim(),
-      work_mode: workModeInput.value.trim(),
-    };
-    const limitRaw = limitInput.value.trim();
-    if (limitRaw) {
-      const limit = Number(limitRaw);
-      if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
-        showError("Limit must be an integer between 1 and 100.");
-        return;
-      }
-      payload.limit = limit;
-    }
-
     submitBtn.disabled = true;
-    submitBtn.textContent = "Running...";
+    submitBtn.textContent = mode === "prompt" ? "Extracting params..." : "Running...";
     clearError();
     results.hidden = true;
+    extractedParams.hidden = true;
 
     try {
+      if (mode === "prompt") {
+        const extractResponse = await fetch("/api/coresignal/extract-params", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: payload.prompt }),
+        });
+        let extracted;
+        try {
+          extracted = await extractResponse.json();
+        } catch (_parseError) {
+          showError(`Extraction failed with HTTP ${extractResponse.status} and a non-JSON body.`);
+          return;
+        }
+        if (!extractResponse.ok) {
+          const detail =
+            typeof extracted?.detail === "string"
+              ? extracted.detail
+              : JSON.stringify(extracted?.detail || extracted);
+          showError(`Extraction HTTP ${extractResponse.status}: ${detail}`);
+          return;
+        }
+        renderExtractedParams(extracted);
+        submitBtn.textContent = "Searching CoreSignal...";
+      }
+
       const response = await fetch("/api/coresignal/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -247,12 +494,83 @@
         return;
       }
 
+      if (mode === "prompt" && data.request?.extracted_params) {
+        renderExtractedParams(data.request.extracted_params);
+      }
+
       renderResults(data);
     } catch (error) {
       showError(`Request failed: ${String(error)}`);
     } finally {
       submitBtn.disabled = false;
       submitBtn.textContent = "Run Search";
+    }
+  });
+
+  collectForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    clearCollectError();
+
+    let jobIds;
+    try {
+      jobIds = parseJobIds(collectIdsInput.value);
+      if (!jobIds.length) {
+        showCollectError("Enter at least one job ID.");
+        return;
+      }
+    } catch (validationError) {
+      showCollectError(String(validationError));
+      return;
+    }
+
+    collectBtn.disabled = true;
+    collectBtn.textContent = "Collecting...";
+    collectResults.hidden = true;
+
+    try {
+      const response = await fetch("/api/coresignal/collect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job_ids: jobIds }),
+      });
+
+      let data;
+      try {
+        data = await response.json();
+      } catch (_parseError) {
+        showCollectError(`Request failed with HTTP ${response.status} and a non-JSON body.`);
+        return;
+      }
+
+      if (!response.ok) {
+        const detail =
+          typeof data?.detail === "string"
+            ? data.detail
+            : data?.detail
+              ? JSON.stringify(data.detail)
+              : JSON.stringify(data);
+        showCollectError(`HTTP ${response.status}: ${detail}`);
+        return;
+      }
+
+      collectResults.hidden = false;
+      renderJobCards(collectJobsList, data.jobs || []);
+
+      const errors = data.collect_errors || [];
+      if (errors.length) {
+        manualCollectErrors.hidden = false;
+        manualCollectErrors.textContent = `Collect errors: ${errors.join(" | ")}`;
+      } else {
+        manualCollectErrors.hidden = true;
+        manualCollectErrors.textContent = "";
+      }
+
+      collectRawJson.textContent = JSON.stringify(data, null, 2);
+    } catch (error) {
+      showCollectError(`Request failed: ${String(error)}`);
+    } finally {
+      collectBtn.disabled = false;
+      collectBtn.textContent = "Collect jobs";
     }
   });
 </script>
