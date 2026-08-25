@@ -8,10 +8,10 @@
   <div class="header">
     <h1>Conversations</h1>
     <div class="header-actions">
-      <a class="download-link" href="/">Dashboard</a>
-      <a class="download-link" href="/users">Users</a>
-      <a class="download-link" href="/skills">Skills</a>
-      <form method="post" action="/logout">
+      <a class="download-link" href="/admin">Dashboard</a>
+      <a class="download-link" href="/admin/users">Users</a>
+      <a class="download-link" href="/admin/skills">Skills</a>
+      <form method="post" action="/admin/logout">
         <button class="logout-btn" type="submit">Logout</button>
       </form>
     </div>
@@ -39,7 +39,7 @@
               <td>{{ conversation.messages_count }}</td>
               <td>{{ conversation.last_message_at }}</td>
               <td>
-                <a class="download-link" href="/conversations/{{ conversation.user_id }}">View</a>
+                <a class="download-link" href="/admin/conversations/{{ conversation.user_id }}">View</a>
               </td>
             </tr>
             {% endfor %}

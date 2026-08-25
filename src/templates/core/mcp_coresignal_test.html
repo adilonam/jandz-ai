@@ -8,9 +8,9 @@
   <div class="header">
     <h1>CoreSignal Jobs Test</h1>
     <div class="header-actions">
-      <a class="download-link" href="/mcp/search-history">Search history</a>
-      <a class="logout-btn" href="/">Back</a>
-      <form method="post" action="/logout">
+      <a class="download-link" href="/admin/mcp/search-history">Search history</a>
+      <a class="logout-btn" href="/admin">Back</a>
+      <form method="post" action="/admin/logout">
         <button class="logout-btn" type="submit">Logout</button>
       </form>
     </div>
@@ -445,7 +445,7 @@
 
     try {
       if (mode === "prompt") {
-        const extractResponse = await fetch("/api/coresignal/extract-params", {
+        const extractResponse = await fetch("/admin/api/coresignal/extract-params", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prompt: payload.prompt }),
@@ -469,7 +469,7 @@
         submitBtn.textContent = "Searching CoreSignal...";
       }
 
-      const response = await fetch("/api/coresignal/jobs", {
+      const response = await fetch("/admin/api/coresignal/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -528,7 +528,7 @@
     collectResults.hidden = true;
 
     try {
-      const response = await fetch("/api/coresignal/collect", {
+      const response = await fetch("/admin/api/coresignal/collect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ job_ids: jobIds }),

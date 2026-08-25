@@ -1,0 +1,298 @@
+:root {
+  --landing-ink: #0c1f24;
+  --landing-ink-soft: #1a333a;
+  --landing-fog: #e8f2f0;
+  --landing-mist: #c5ddd8;
+  --landing-accent: #0d8f9a;
+  --landing-accent-deep: #08707a;
+  --landing-telegram: #229ed9;
+  --landing-telegram-deep: #1a86b8;
+  --landing-cream: #f4faf8;
+  --landing-display: "Syne", "Avenir Next", "Segoe UI", sans-serif;
+  --landing-body: "Figtree", "Avenir Next", "Segoe UI", sans-serif;
+}
+
+.landing-page {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--landing-ink);
+  font-family: var(--landing-body);
+  background: var(--landing-cream);
+}
+
+.landing {
+  overflow-x: clip;
+}
+
+/* —— Hero —— */
+.landing-hero {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  align-items: end;
+  padding: clamp(1.5rem, 4vw, 3rem);
+  box-sizing: border-box;
+}
+
+.landing-hero-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 90% 70% at 12% 18%, rgba(13, 143, 154, 0.28), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 12%, rgba(34, 158, 217, 0.18), transparent 50%),
+    radial-gradient(ellipse 60% 50% at 70% 88%, rgba(26, 51, 58, 0.12), transparent 55%),
+    linear-gradient(165deg, #d7ebe7 0%, #eef6f4 42%, #d2e4e8 100%);
+  overflow: hidden;
+}
+
+.landing-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(2px);
+  animation: landing-drift 18s ease-in-out infinite alternate;
+}
+
+.landing-orb-a {
+  width: min(48vw, 420px);
+  height: min(48vw, 420px);
+  top: -8%;
+  right: -6%;
+  background: radial-gradient(circle, rgba(13, 143, 154, 0.35), transparent 70%);
+}
+
+.landing-orb-b {
+  width: min(36vw, 300px);
+  height: min(36vw, 300px);
+  bottom: 12%;
+  left: -4%;
+  background: radial-gradient(circle, rgba(34, 158, 217, 0.22), transparent 70%);
+  animation-delay: -6s;
+  animation-duration: 22s;
+}
+
+.landing-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(12, 31, 36, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(12, 31, 36, 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 20%, transparent 75%);
+  opacity: 0.55;
+}
+
+.landing-paths {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.45;
+}
+
+.landing-path {
+  fill: none;
+  stroke: var(--landing-accent-deep);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-dasharray: 8 14;
+  opacity: 0.35;
+  animation: landing-dash 28s linear infinite;
+}
+
+.landing-path-delay {
+  stroke: var(--landing-telegram-deep);
+  animation-delay: -10s;
+  opacity: 0.28;
+}
+
+.landing-hero-copy {
+  position: relative;
+  z-index: 1;
+  width: min(40rem, 100%);
+  animation: landing-rise 0.9s ease-out both;
+}
+
+.landing-brand {
+  margin: 0 0 0.85rem;
+  font-family: var(--landing-display);
+  font-size: clamp(2.4rem, 8vw, 4.5rem);
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+  color: var(--landing-ink);
+}
+
+.landing-headline {
+  margin: 0;
+  max-width: 18ch;
+  font-family: var(--landing-display);
+  font-size: clamp(1.55rem, 4.2vw, 2.35rem);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--landing-ink-soft);
+}
+
+.landing-lede {
+  margin: 1.1rem 0 1.75rem;
+  max-width: 34ch;
+  font-size: clamp(1.02rem, 2.2vw, 1.15rem);
+  line-height: 1.55;
+  color: rgba(12, 31, 36, 0.78);
+  font-weight: 500;
+}
+
+.landing-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 0.95rem 1.45rem;
+  border-radius: 10px;
+  font-family: var(--landing-body);
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.landing-cta-hero {
+  background: var(--landing-ink);
+  color: var(--landing-fog);
+  box-shadow: 0 12px 28px rgba(12, 31, 36, 0.18);
+}
+
+.landing-cta-hero:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 32px rgba(12, 31, 36, 0.22);
+}
+
+/* —— How —— */
+.landing-how {
+  padding: clamp(3.5rem, 9vw, 6rem) clamp(1.5rem, 4vw, 3rem);
+  background: var(--landing-ink);
+  color: var(--landing-fog);
+}
+
+.landing-section-title {
+  margin: 0 0 0.85rem;
+  font-family: var(--landing-display);
+  font-size: clamp(1.45rem, 3.5vw, 2rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  max-width: 18ch;
+}
+
+.landing-section-copy {
+  margin: 0;
+  max-width: 38rem;
+  font-size: 1.05rem;
+  line-height: 1.65;
+  opacity: 0.88;
+}
+
+.landing-how .landing-section-copy {
+  color: var(--landing-mist);
+}
+
+/* —— Contact —— */
+.landing-contact {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  padding: clamp(4rem, 12vw, 7rem) clamp(1.5rem, 4vw, 3rem);
+  background:
+    radial-gradient(ellipse 55% 60% at 50% 40%, rgba(34, 158, 217, 0.12), transparent 70%),
+    linear-gradient(180deg, var(--landing-cream) 0%, #dff0ee 100%);
+  animation: landing-rise 1s ease-out 0.15s both;
+}
+
+.landing-contact .landing-section-title {
+  max-width: none;
+}
+
+.landing-contact .landing-section-copy {
+  margin-bottom: 1.75rem;
+  color: rgba(12, 31, 36, 0.75);
+}
+
+.landing-handle {
+  font-weight: 700;
+  color: var(--landing-accent-deep);
+}
+
+.landing-cta-telegram {
+  background: linear-gradient(135deg, var(--landing-telegram) 0%, var(--landing-telegram-deep) 100%);
+  color: #ffffff;
+  min-width: min(18rem, 100%);
+  box-shadow: 0 14px 30px rgba(26, 134, 184, 0.28);
+}
+
+.landing-cta-telegram:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 36px rgba(26, 134, 184, 0.34);
+}
+
+.landing-tg-icon {
+  width: 1.35rem;
+  height: 1.35rem;
+  flex-shrink: 0;
+}
+
+.landing-footer {
+  padding: 1.25rem clamp(1.5rem, 4vw, 3rem) 2rem;
+  text-align: center;
+  font-family: var(--landing-display);
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: rgba(12, 31, 36, 0.45);
+  background: #dff0ee;
+}
+
+@keyframes landing-rise {
+  from {
+    opacity: 0;
+    transform: translateY(1.25rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes landing-drift {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(-3%, 4%) scale(1.06);
+  }
+}
+
+@keyframes landing-dash {
+  to {
+    stroke-dashoffset: -400;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-hero-copy,
+  .landing-contact,
+  .landing-orb,
+  .landing-path {
+    animation: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .landing-hero {
+    align-items: center;
+    padding-top: 18vh;
+  }
+
+  .landing-headline {
+    max-width: none;
+  }
+}
