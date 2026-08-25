@@ -26,6 +26,7 @@ class ChatUser(Base):
     job_search_stage: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     preferred_work_mode: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     preferred_job_location: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    onboarding_data: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     skills: Mapped[List["Skill"]] = relationship(
         secondary=chat_user_skills,
         back_populates="users",

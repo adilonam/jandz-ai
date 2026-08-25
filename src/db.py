@@ -147,6 +147,9 @@ async def init_db() -> None:
             )
         )
         await conn.execute(
+            text("ALTER TABLE chat_users ADD COLUMN IF NOT EXISTS onboarding_data VARCHAR(512)")
+        )
+        await conn.execute(
             text("ALTER TABLE skills ADD COLUMN IF NOT EXISTS category VARCHAR(120)")
         )
         await conn.execute(

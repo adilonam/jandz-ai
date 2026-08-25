@@ -1,7 +1,7 @@
 """Telegram webhook parsing and send-message helpers."""
 
 from dataclasses import dataclass
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 import httpx
 
@@ -100,3 +100,37 @@ async def send_telegram_text(chat_id: int, body: str) -> str:
         if response.status_code >= 400:
             print(f"Telegram API error {response.status_code}: {response.text}")
     return body
+
+
+async def send_telegram_document(
+    chat_id: int,
+    file_bytes: bytes,
+    filename: str,
+    *,
+    caption: Optional[str] = None,
+) -> bool:
+    """Send a document (e.g. generated CV PDF) through the Telegram Bot API."""
+    if not settings.TELEGRAM_BOT_TOKEN:
+        print("TELEGRAM_BOT_TOKEN is not set; skipping document send")
+        return False
+
+    data: Dict[str, Any] = {"chat_id": chat_id}
+    if caption:
+        data["caption"] = format_outbound_message(caption)
+
+    files = {"document": (filename, file_bytes, "application/pdf")}
+
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            response = await client.post(
+                _telegram_api_url("sendDocument"),
+                data=data,
+                files=files,
+            )
+            if response.status_code >= 400:
+                print(f"Telegram sendDocument error {response.status_code}: {response.text}")
+                return False
+            return True
+    except Exception as exc:
+        print(f"Failed to send Telegram document: {exc}")
+        return False
