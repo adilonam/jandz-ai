@@ -28,6 +28,9 @@ class Settings:
 
     TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip()
+    TELEGRAM_BOT_USERNAME = (
+        os.getenv("TELEGRAM_BOT_USERNAME", "jandzaibot").strip().lstrip("@") or "jandzaibot"
+    )
     PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
 
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
@@ -53,6 +56,11 @@ class Settings:
     def public_base_url(self) -> str:
         """Public origin for ``/opportunities/{id}`` Telegram links (no trailing slash)."""
         return self.PUBLIC_BASE_URL
+
+    @property
+    def telegram_bot_url(self) -> str:
+        """Public ``t.me`` deep link for the configured bot username."""
+        return f"https://t.me/{self.TELEGRAM_BOT_USERNAME}"
 
     @property
     def ASYNC_DATABASE_URL(self) -> str:
