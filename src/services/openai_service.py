@@ -63,6 +63,172 @@ async def generate_openai_reply(user_text: str) -> str:
     return text or "Sorry, I could not generate a response right now."
 
 
+@dataclass
+class ManualCvContent:
+    """AI- or fallback-generated copy for a manually built CV PDF."""
+
+    headline: str
+    summary: str
+    career_focus: str
+    strengths: List[str] = field(default_factory=list)
+    skills: List[str] = field(default_factory=list)
+
+
+def build_fallback_manual_cv_content(
+    full_name: str,
+    category: str,
+    skills: Sequence[str],
+) -> ManualCvContent:
+    """Static but polished CV copy when OpenAI is unavailable."""
+    name = " ".join((full_name or "").split()) or "Candidate"
+    field_label = " ".join((category or "").split()) or "Professional"
+    cleaned_skills = [skill.strip() for skill in skills if skill and skill.strip()]
+    skill_phrase = ", ".join(cleaned_skills[:5]) if cleaned_skills else "core professional competencies"
+
+    strengths = [
+        f"Clear focus on building a career in {field_label.lower()}",
+        "Motivated to apply practical skills in real-world settings",
+        "Ready to learn quickly and contribute in collaborative environments",
+    ]
+    if cleaned_skills:
+        strengths.insert(
+            1,
+            f"Hands-on interest across {', '.join(cleaned_skills[:3])}",
+        )
+
+    return ManualCvContent(
+        headline=f"{field_label} Professional",
+        summary=(
+            f"{name} is building a career in {field_label.lower()}, with a focus on "
+            f"{skill_phrase}. This profile highlights transferable strengths and a "
+            f"clear motivation to grow through hands-on opportunities, training, and "
+            f"roles that match these skills."
+        ),
+        career_focus=(
+            f"Seeking entry-level or junior opportunities in {field_label.lower()} "
+            f"where {skill_phrase} can be applied and developed further. Open to "
+            f"roles that reward reliability, curiosity, and continuous learning."
+        ),
+        strengths=strengths[:4],
+        skills=cleaned_skills or ["General professional skills"],
+    )
+
+
+def _normalize_manual_cv_content(
+    parsed: Dict[str, Any],
+    full_name: str,
+    category: str,
+    skills: Sequence[str],
+) -> ManualCvContent:
+    """Validate model JSON and fill gaps from the static fallback."""
+    fallback = build_fallback_manual_cv_content(full_name, category, skills)
+    cleaned_skills = [skill.strip() for skill in skills if skill and skill.strip()]
+
+    headline = str(parsed.get("headline") or "").strip() or fallback.headline
+    summary = str(parsed.get("summary") or "").strip() or fallback.summary
+    career_focus = (
+        str(parsed.get("career_focus") or parsed.get("objective") or "").strip()
+        or fallback.career_focus
+    )
+
+    raw_strengths = parsed.get("strengths")
+    strengths: List[str] = []
+    if isinstance(raw_strengths, list):
+        for item in raw_strengths:
+            text = str(item).strip()
+            if text and text not in strengths:
+                strengths.append(text)
+    if not strengths:
+        strengths = list(fallback.strengths)
+
+    raw_skills = parsed.get("skills")
+    phrased_skills: List[str] = []
+    if isinstance(raw_skills, list):
+        for item in raw_skills:
+            text = str(item).strip()
+            if text and text not in phrased_skills:
+                phrased_skills.append(text)
+    if not phrased_skills:
+        phrased_skills = cleaned_skills or list(fallback.skills)
+
+    return ManualCvContent(
+        headline=headline[:120],
+        summary=summary[:900],
+        career_focus=career_focus[:600],
+        strengths=strengths[:6],
+        skills=phrased_skills[:12],
+    )
+
+
+async def generate_manual_cv_content(
+    full_name: str,
+    category: str,
+    skills: Sequence[str],
+) -> ManualCvContent:
+    """Generate structured CV narrative from name, category, and skills."""
+    fallback = build_fallback_manual_cv_content(full_name, category, skills)
+    if not settings.OPENAI_API_KEY:
+        return fallback
+
+    skills_label = ", ".join(fallback.skills)
+    system_prompt = (
+        "You write professional CV profile copy for candidates who only provided "
+        "name, career field, and skills. Return strict JSON only in this shape: "
+        '{"headline": "...", "summary": "...", "career_focus": "...", '
+        '"strengths": ["...", "..."], "skills": ["...", "..."]}. '
+        "Rules: write in third person; keep summary to 2-4 sentences; career_focus "
+        "to 1-2 sentences; give 3-5 strengths as short bullets; skills may lightly "
+        "rephrase the provided list but must stay faithful to it. "
+        "Do NOT invent employers, job titles held, employment dates, education "
+        "institutions, certifications, or quantified achievements presented as fact. "
+        "Frame content as profile, objectives, and skills narrative only."
+    )
+    user_prompt = (
+        f"Full name: {full_name.strip() or 'Candidate'}\n"
+        f"Career field / category: {category.strip() or 'Professional'}\n"
+        f"Skills: {skills_label}"
+    )
+    payload = {
+        "model": settings.OPENAI_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.5,
+        "response_format": {"type": "json_object"},
+    }
+    headers = {
+        "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                json=payload,
+                headers=headers,
+            )
+            if resp.status_code >= 400:
+                payload.pop("response_format", None)
+                resp = await client.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    json=payload,
+                    headers=headers,
+                )
+            resp.raise_for_status()
+            data = resp.json()
+        content = str(data["choices"][0]["message"]["content"]).strip()
+        parsed = _safe_json_loads(content)
+        if not parsed:
+            print("Manual CV content: could not parse OpenAI JSON; using fallback")
+            return fallback
+        return _normalize_manual_cv_content(parsed, full_name, category, skills)
+    except Exception as exc:
+        print(f"OpenAI manual CV content generation failed: {exc}")
+        return fallback
+
+
 def _parse_opportunities_json(raw_content: str) -> List[Dict[str, Any]]:
     """Extract an opportunities array from model JSON (dict or bare list)."""
     content = raw_content.strip()

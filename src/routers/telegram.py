@@ -19,6 +19,14 @@ from src.services.job_flow_service import (
     normalize_opportunity_type,
     opportunities_reply_for_user,
 )
+from src.services.onboarding_service import (
+    begin_manual_onboarding,
+    handle_manual_onboarding_message,
+    is_awaiting_cv_choice,
+    is_manual_onboarding_stage,
+    is_no_cv_response,
+    start_cv_choice_prompt,
+)
 from src.services.openai_service import (
     extract_full_name_from_resume,
     extract_full_name_from_resume_pdf,
@@ -33,6 +41,7 @@ from src.services.telegram_service import (
     IncomingTelegramMessage,
     download_telegram_file,
     extract_incoming_user_messages,
+    send_telegram_document,
     send_telegram_text,
 )
 from src.services.user_service import (
@@ -48,7 +57,10 @@ _ASK_EDUCATION_OR_JOBS = (
     "I can suggest opportunities matched to your skills. "
     "Do you want education or jobs?"
 )
-_ASK_PDF_RESUME = "Hello! Before we start, please send your CV resume as a PDF file."
+_ASK_PDF_RESUME = (
+    "Hello! Before we start, please send your CV resume as a PDF file.\n\n"
+    "Don't have a CV? Reply *no* and I'll ask a few quick questions to build one for you."
+)
 _CV_THANKS_TEMPLATE = (
     "Thanks, your CV is uploaded. "
     "Extracted skills: {skills}. "
@@ -127,6 +139,45 @@ async def _send_and_log_text(chat_id: int, user_id: int, body: str) -> None:
             text=sent_body,
             channel="telegram",
         )
+
+
+async def _send_document_and_log(
+    chat_id: int,
+    user_id: int,
+    pdf_bytes: bytes,
+    filename: str,
+    *,
+    caption: Optional[str] = None,
+) -> None:
+    await send_telegram_document(chat_id, pdf_bytes, filename, caption=caption)
+    log_text = caption or f"[Sent document: {filename}]"
+    async with SessionLocal() as session:
+        await create_conversation_message(
+            session,
+            user_id=user_id,
+            direction="assistant",
+            text=log_text,
+            channel="telegram",
+        )
+
+
+def _queue_document(
+    background_tasks: BackgroundTasks,
+    chat_id: int,
+    user_id: int,
+    pdf_bytes: bytes,
+    filename: str,
+    *,
+    caption: Optional[str] = None,
+) -> None:
+    background_tasks.add_task(
+        _send_document_and_log,
+        chat_id,
+        user_id,
+        pdf_bytes,
+        filename,
+        caption=caption,
+    )
 
 
 async def _reply_with_openai_and_log(
@@ -292,6 +343,65 @@ async def _handle_voice_note(
     )
 
 
+async def _handle_manual_onboarding(
+    db: AsyncSession,
+    user: ChatUser,
+    text: str,
+    background_tasks: BackgroundTasks,
+    chat_id: int,
+) -> None:
+    reply_text, pdf_bytes, pdf_filename = await handle_manual_onboarding_message(
+        db,
+        user,
+        text,
+    )
+    if pdf_bytes and pdf_filename:
+        _queue_document(
+            background_tasks,
+            chat_id,
+            user.id,
+            pdf_bytes,
+            pdf_filename,
+            caption="Here is your basic CV based on your answers.",
+        )
+    _queue_reply(background_tasks, chat_id, user.id, reply_text)
+
+
+async def _handle_no_resume_message(
+    db: AsyncSession,
+    user: ChatUser,
+    message: IncomingTelegramMessage,
+    background_tasks: BackgroundTasks,
+) -> None:
+    """Route users without a CV through choice prompt or manual onboarding."""
+    chat_id = message.chat_id
+    text = (message.text or "").strip()
+
+    if is_manual_onboarding_stage(user.job_search_stage):
+        if not text:
+            _queue_reply(
+                background_tasks,
+                chat_id,
+                user.id,
+                "Please reply with text so I can continue building your profile.",
+            )
+            return
+        await _handle_manual_onboarding(db, user, text, background_tasks, chat_id)
+        return
+
+    if is_awaiting_cv_choice(user.job_search_stage):
+        if text and is_no_cv_response(text):
+            reply = await begin_manual_onboarding(db, user)
+            _queue_reply(background_tasks, chat_id, user.id, reply)
+            return
+        reply = await start_cv_choice_prompt(db, user)
+        _queue_reply(background_tasks, chat_id, user.id, reply)
+        return
+
+    reply = await start_cv_choice_prompt(db, user)
+    _queue_reply(background_tasks, chat_id, user.id, reply)
+
+
 async def _process_incoming_message(
     db: AsyncSession,
     message: IncomingTelegramMessage,
@@ -316,7 +426,7 @@ async def _process_incoming_message(
         return
 
     if not user.resume_pdf:
-        _queue_reply(background_tasks, message.chat_id, user.id, _ASK_PDF_RESUME)
+        await _handle_no_resume_message(db, user, message, background_tasks)
         return
 
     if message.voice_file_id:

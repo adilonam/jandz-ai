@@ -1,6 +1,7 @@
 """Database operations for chat users."""
 
-from typing import List, Optional
+import json
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import desc, select
 from sqlalchemy.exc import IntegrityError
@@ -94,6 +95,30 @@ async def update_user_display_name(
     await session.commit()
     await session.refresh(user)
     return user
+
+
+async def update_user_onboarding_data(
+    session: AsyncSession,
+    user: ChatUser,
+    onboarding_data: Optional[Dict[str, Any]],
+) -> ChatUser:
+    """Store or clear temporary onboarding payload as JSON."""
+    user.onboarding_data = json.dumps(onboarding_data) if onboarding_data else None
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+def get_user_onboarding_data(user: ChatUser) -> Dict[str, Any]:
+    """Return parsed onboarding JSON or an empty dict."""
+    raw = user.onboarding_data
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
 
 
 async def delete_chat_user_by_id(session: AsyncSession, user_id: int) -> bool:
