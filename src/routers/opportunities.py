@@ -9,7 +9,10 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db import get_db
-from src.services.opportunity_service import get_opportunity_by_id
+from src.services.opportunity_service import (
+    get_opportunity_by_id,
+    normalize_apply_url_to_origin,
+)
 
 router = APIRouter(tags=["opportunities"])
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parents[1] / "templates"))
@@ -50,5 +53,6 @@ async def opportunity_detail(
             "funding_label": funding_label,
             "source_label": _source_label(opportunity.source_url),
             "display_name": display_name,
+            "apply_url": normalize_apply_url_to_origin(opportunity.apply_url),
         },
     )

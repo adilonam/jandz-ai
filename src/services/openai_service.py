@@ -11,6 +11,7 @@ import httpx
 from src.config import settings
 from src.prompts import build_opportunity_prompts
 from src.schemas import JobSearchParams
+from src.services.opportunity_service import normalize_apply_url_to_origin
 
 
 @dataclass
@@ -283,7 +284,7 @@ async def generate_opportunities(
     location: Optional[str] = None,
 ) -> OpportunityGenerationResult:
     """Suggest education or job opportunities as structured JSON when possible."""
-    max_items = limit if limit is not None else 5
+    max_items = limit if limit is not None else 10
     kind = "education" if opportunity_type == "education" else "job"
     skills_label = ", ".join(name.strip() for name in skill_names if name.strip()) or (
         "general profile (skills not extracted yet)"
@@ -310,7 +311,7 @@ async def generate_opportunities(
     )
 
     print(
-        f"[{'education_search' if opportunity_type == 'education' else 'opportunity_search'}] "
+        f"[{'education_search' if opportunity_type == 'education' else 'job_search'}] "
         f"OpenAI API call model={settings.OPENAI_MODEL!r} "
         f"type={opportunity_type!r} skills={skills_label!r} location={location!r} "
         f"max_items={max_items} request_text={request_text!r}"
@@ -355,7 +356,7 @@ async def generate_opportunities(
         if opportunities:
             trimmed = opportunities[:max_items]
             print(
-                f"[{'education_search' if opportunity_type == 'education' else 'opportunity_search'}] "
+                f"[{'education_search' if opportunity_type == 'education' else 'job_search'}] "
                 f"OpenAI parsed {len(trimmed)} opportunities type={opportunity_type!r}"
             )
             return OpportunityGenerationResult(opportunities=trimmed)
@@ -390,7 +391,9 @@ async def generate_opportunities_reply(
     for index, item in enumerate(result.opportunities, start=1):
         title = str(item.get("title") or f"Opportunity {index}").strip()
         org = str(item.get("organization") or "").strip()
-        url = str(item.get("apply_url") or item.get("source_url") or "").strip()
+        url = normalize_apply_url_to_origin(
+            str(item.get("apply_url") or item.get("source_url") or "").strip()
+        ) or ""
         heading = f"{index}. {title}" + (f" — {org}" if org else "")
         lines.append(heading)
         if url:
