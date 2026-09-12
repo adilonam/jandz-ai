@@ -1,7 +1,7 @@
 """Persist and load opportunity records."""
 
 from typing import Any, Dict, List, Optional, Sequence
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +34,31 @@ def _normalize_tips(value: Any) -> Optional[Any]:
         return tips or None
     text = str(value).strip()
     return text or None
+
+
+def normalize_apply_url_to_origin(url: Optional[str]) -> Optional[str]:
+    """Reduce an apply URL to scheme + host (+ port), with a trailing slash.
+
+    Strips path, query, and fragment so Apply opens the site root.
+    Returns None when the value is missing or not a usable http(s) URL.
+    """
+    text = _optional_str(url)
+    if not text:
+        return None
+
+    parsed = urlparse(text)
+    if not parsed.scheme or not parsed.netloc:
+        parsed = urlparse(f"https://{text.lstrip('/')}")
+
+    scheme = (parsed.scheme or "").lower()
+    host = parsed.netloc
+    if scheme not in ("http", "https") or not host:
+        return None
+    # Reject values that are clearly not hostnames (e.g. bare phrases).
+    if " " in host or "." not in host and ":" not in host and host.lower() != "localhost":
+        return None
+
+    return f"{scheme}://{host}/"
 
 
 def _is_linkedin_direct_job_url(url: Optional[str]) -> bool:
@@ -96,7 +121,7 @@ def normalize_opportunity_payload(
     if kind == "job":
         if not location:
             location = _optional_str(default_location, max_len=255)
-        # Keep real listing URLs (e.g. CoreSignal external_url); synthesize LinkedIn search only when missing.
+        # Keep real listing URLs when present; synthesize LinkedIn search only when missing.
         if not apply_url:
             apply_url = build_linkedin_jobs_search_url(
                 title=title,
@@ -105,6 +130,8 @@ def normalize_opportunity_payload(
             )
         if _is_linkedin_direct_job_url(source_url):
             source_url = None
+
+    apply_url = normalize_apply_url_to_origin(apply_url)
 
     return {
         "type": kind,

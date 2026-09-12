@@ -28,7 +28,9 @@ def _json_shape_instructions(max_items: int) -> str:
         "  ]\n"
         "}\n"
         "Omit unknown optional fields or use null. Do not invent broken URLs; "
-        "if unsure of apply_url, use a useful search URL."
+        "if unsure of apply_url, use a useful search URL. "
+        "NEVER use LinkedIn (linkedin.com) as source_url, apply_url, or listing host — "
+        "prefer official university/program pages instead."
     )
 
 
@@ -58,6 +60,7 @@ def build_education_system_prompt(
         "explicitly asked for certificates, online courses, or bootcamps. "
         "Match the degree level the user asked for (e.g. Master's, Bachelor's, MBA, PhD) "
         "and prefer fields aligned with their skills. "
+        "Do not use LinkedIn as a source or apply destination. "
         f"{location_rule} "
         + _json_shape_instructions(max_items)
     )
@@ -80,6 +83,7 @@ def build_education_user_prompt(
             f"Parsed location: {location_label}",
             (
                 f"Suggest {max_items} university degree programs tailored to this request. "
+                "Use official university/program URLs only — never linkedin.com. "
                 "Fill optional fields when you know them. Return JSON only."
             ),
         ]
